@@ -15,20 +15,31 @@ METADATA_CSV: Path = DATA_DIR / "HAM10000_metadata.csv"
 # *** Kaggle ***
 KAGGLE_DATASET: str = "kmader/skin-cancer-mnist-ham10000"
 
-# *** Labels ***
-# Every image in HAM10000 carries one of seven diagnoses in the "dx" column.
-# I fold them into benign vs malignant, because that is the question the
-# whole project is built around.
-#   akiec - actinic keratoses, pre-cancerous
-#   bcc   - basal cell carcinoma
-#   mel   - melanoma
+# *** Classes ***
+# Every image in HAM10000 carries one of seven diagnoses in the "dx" column,
+# and the model predicts all seven. A position in this tuple is the number
+# the network learns, so the order has to stay fixed. Once weights are
+# trained against it, reordering would silently relabel every prediction.
+# Alphabetical, so there is no arbitrary decision to remember.
+CLASSES: tuple = ("akiec", "bcc", "bkl", "df", "mel", "nv", "vasc")
+
+# What a person should see instead of a four-letter code. The code stays in
+# the name because it is what the dataset and every paper on it use.
+CLASS_NAMES: dict = {
+    "akiec": "Actinic keratosis (akiec)",
+    "bcc": "Basal cell carcinoma (bcc)",
+    "bkl": "Benign keratosis (bkl)",
+    "df": "Dermatofibroma (df)",
+    "mel": "Melanoma (mel)",
+    "nv": "Melanocytic nevus (nv)",
+    "vasc": "Vascular lesion (vasc)",
+}
+
+# The model never predicts these two directly. They are read off whichever
+# diagnosis it picked, so a prediction can answer both "what is it" and
+# "should I worry". akiec counts as malignant because it is pre-cancerous.
 MALIGNANT_CLASSES: tuple = ("akiec", "bcc", "mel")
-#   bkl   - benign keratosis
-#   df    - dermatofibroma
-#   nv    - melanocytic nevus, an ordinary mole
-#   vasc  - vascular lesion
 BENIGN_CLASSES: tuple = ("bkl", "df", "nv", "vasc")
 
-# Numbers, not strings, because that is what the loss function expects.
-BENIGN: int = 0
-MALIGNANT: int = 1
+MALIGNANT: str = "malignant"
+BENIGN: str = "benign"
