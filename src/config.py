@@ -87,9 +87,12 @@ ROTATION_DEGREES: int = 20
 # drag the whole update off course.
 BATCH_SIZE: int = 32
 
-# How many times the network works through the whole training set. Same
-# number as the MNIST project, and a starting point rather than a finding.
-EPOCHS: int = 15
+# How many times the network works through the whole training set. Started at
+# 15, the same as the MNIST project. Augmentation made the training task hard
+# enough that the best epoch was the last one, so the run was being cut short
+# rather than converging. Only the best epoch is kept, so overshooting costs
+# time and nothing else.
+EPOCHS: int = 40
 
 # How big a step the optimiser takes. 0.001 is Adam's own default and a
 # sensible place to start; too high and the loss bounces, too low and the

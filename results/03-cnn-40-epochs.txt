@@ -1,0 +1,160 @@
+SkinLesionCNN, augmented, 40 epochs
+===================================
+
+Same as 02 in every way except the epoch count. The 15-epoch run had its best
+epoch last, which meant it was being cut off rather than finishing.
+
+Setup
+-----
+model            SkinLesionCNN, 4 conv blocks, 391,175 parameters
+input            224x224 RGB
+augmentation     RandomHorizontalFlip, RandomVerticalFlip,
+                 RandomRotation(20), ColorJitter(0.2, 0.2, 0.1)
+                 training set only
+normalisation    HAM10000 training statistics
+loss             CrossEntropyLoss with class weights (inverse frequency)
+optimiser        Adam, lr 0.001, no schedule
+batch size       32
+epochs           40
+device           mps
+split            by lesion_id, seed 42, 70/15/15
+train/val/test   6986 / 1521 / 1508 images
+
+Training
+--------
+epoch  1: train loss 1.7616, val loss 1.2757, val accuracy 50.69%  <- saved
+epoch  2: train loss 1.6321, val loss 1.5810, val accuracy 40.37%
+epoch  3: train loss 1.5982, val loss 1.3780, val accuracy 42.41%
+epoch  4: train loss 1.5570, val loss 1.2163, val accuracy 51.68%  <- saved
+epoch  5: train loss 1.5142, val loss 1.7265, val accuracy 40.57%
+epoch  6: train loss 1.4867, val loss 1.2419, val accuracy 49.77%
+epoch  7: train loss 1.5169, val loss 1.2009, val accuracy 54.50%  <- saved
+epoch  8: train loss 1.4470, val loss 1.1776, val accuracy 54.31%  <- saved
+epoch  9: train loss 1.4228, val loss 1.2299, val accuracy 51.68%
+epoch 10: train loss 1.4536, val loss 1.1988, val accuracy 53.65%
+epoch 11: train loss 1.4380, val loss 1.0686, val accuracy 57.53%  <- saved
+epoch 12: train loss 1.4078, val loss 1.1359, val accuracy 53.85%
+epoch 13: train loss 1.3958, val loss 1.0269, val accuracy 60.03%  <- saved
+epoch 14: train loss 1.3698, val loss 1.1348, val accuracy 58.12%
+epoch 15: train loss 1.3750, val loss 1.1277, val accuracy 55.56%
+epoch 16: train loss 1.3524, val loss 1.2923, val accuracy 52.07%
+epoch 17: train loss 1.3886, val loss 1.7164, val accuracy 40.83%
+epoch 18: train loss 1.4064, val loss 1.0799, val accuracy 58.12%
+epoch 19: train loss 1.3068, val loss 1.1336, val accuracy 58.19%
+epoch 20: train loss 1.3329, val loss 1.1717, val accuracy 57.59%
+epoch 21: train loss 1.3155, val loss 1.2259, val accuracy 54.44%
+epoch 22: train loss 1.3283, val loss 1.1265, val accuracy 59.63%
+epoch 23: train loss 1.3237, val loss 1.0744, val accuracy 59.37%
+epoch 24: train loss 1.2892, val loss 1.2022, val accuracy 56.80%
+epoch 25: train loss 1.2763, val loss 1.2660, val accuracy 54.64%
+epoch 26: train loss 1.2834, val loss 1.1966, val accuracy 57.86%
+epoch 27: train loss 1.2855, val loss 1.0237, val accuracy 65.29%  <- saved
+epoch 28: train loss 1.2685, val loss 1.0260, val accuracy 62.06%
+epoch 29: train loss 1.2598, val loss 1.1519, val accuracy 57.79%
+epoch 30: train loss 1.2269, val loss 1.0232, val accuracy 62.13%  <- saved
+epoch 31: train loss 1.2758, val loss 1.1747, val accuracy 58.78%
+epoch 32: train loss 1.2486, val loss 1.0334, val accuracy 62.00%
+epoch 33: train loss 1.2296, val loss 1.1100, val accuracy 57.86%
+epoch 34: train loss 1.2401, val loss 1.0891, val accuracy 60.88%
+epoch 35: train loss 1.1740, val loss 1.2272, val accuracy 56.41%
+epoch 36: train loss 1.1941, val loss 0.9871, val accuracy 62.20%  <- saved
+epoch 37: train loss 1.1880, val loss 0.9478, val accuracy 62.20%  <- saved
+epoch 38: train loss 1.2077, val loss 1.0999, val accuracy 60.22%
+epoch 39: train loss 1.1996, val loss 1.1996, val accuracy 53.25%
+epoch 40: train loss 1.1690, val loss 1.0651, val accuracy 63.12%
+
+best validation loss 0.9478 at epoch 37
+
+Training curves
+---------------
+
+ 1.76 |  t                                                                                                                     
+ 1.70 |              v                                   v                                                                     
+ 1.64 |     t                                                                                                                  
+ 1.57 |     v  t  t                                                                                                            
+ 1.51 |              t  t  t                                                                                                   
+ 1.45 |                       t  t  t  t                                                                                       
+ 1.39 |        v                          t  t  t  t     t  t                                                                  
+ 1.32 |                                               *        t  t  t  t  t                                                   
+ 1.26 |  v              v        v                                            t  *  t  t  t  t     t  t  t  t                  
+ 1.20 |           v        v  v     v                             v  v        v     v           t  v           *  t  t  t  *  t
+ 1.14 |                                   v     v  v           v        v                    v           v                     
+ 1.07 |                                v                    v              v                                v           v     v
+ 1.01 |                                      v                                         v  v     v     v           v            
+ 0.95 |                                                                                                              v         
+      +------------------------------------------------------------------------------------------------------------------------
+         1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40
+       epoch
+
+t = train loss, v = val loss, * = both on the same line
+
+Same thing as an image in 03-cnn-40-epochs.png
+
+Validation results
+------------------
+1521 images. The test set has not been touched.
+
+confusion matrix, rows are the real diagnosis, columns what the model guessed
+
+         akiec    bcc    bkl     df    mel     nv   vasc
+akiec       30      3      0      7      4      0      2
+bcc         28     18      7     11      2      1      2
+bkl         23     10     57     33     30     15      1
+df           4      1      0     12      1      1      2
+mel         21      1     22      2    121     10      1
+nv          15     30     42     60    168    693     14
+vasc         0      0      0      0      0      1     15
+
+class    support   recall  precision
+akiec         46   65.2%      24.8%
+bcc           69   26.1%      28.6%
+bkl          169   33.7%      44.5%
+df            21   57.1%       9.6%
+mel          178   68.0%      37.1%
+nv          1022   67.8%      96.1%
+vasc          16   93.8%      40.5%
+
+accuracy 62.2%, against 67.2% for a model that answers nv every time
+
+malignant lesions found   228
+malignant lesions missed   65
+false alarms              282
+recall on malignant       77.8%
+precision on malignant    44.7%
+
+All three runs side by side
+---------------------------
+                          01 baseline   02 augmented   03 40 epochs
+recall on malignant             60.8%          89.8%          77.8%
+malignant lesions missed          115             30             65
+false alarms                      250            446            282
+precision on malignant          41.6%          37.1%          44.7%
+melanoma recall                 46.1%          71.9%          68.0%
+accuracy                        59.4%          57.7%          62.2%
+best validation loss           1.0367         1.0817         0.9478
+
+What the numbers say
+--------------------
+Longer training improved everything except the number this project exists to
+move. Validation loss is the best of the three by a clear margin, accuracy is
+the highest, precision is the highest, and false alarms fell from 446 to 282.
+Missed cancers went the wrong way, 30 up to 65.
+
+The reason is that the network got better and, with that, more sure of
+itself. It no longer guesses towards the malignant classes as freely, which
+cuts false alarms and lets real cases slip through.
+
+That is an argument against the decision rule, not against the longer run.
+Taking whichever class scores highest is a poor way to decide something where
+the two mistakes cost such different amounts. This model knows more than the
+02 model does; it is simply being read at the wrong operating point.
+
+df is the surprise: 14.3% recall in 02, 57.1% here, on 82 training examples.
+Precision stayed at 9.6%, so it is over-calling df badly, and 60 ordinary
+moles were labelled dermatofibroma. With 21 df images in validation, a swing
+of a few images moves this number a lot. Not worth reading much into.
+
+Training loss reached 1.1690 and was still falling, and the best epoch was 37
+out of 40, so there may be a little more to gain. Validation loss bounced
+between 0.95 and 1.23 in the last ten epochs, which points at the learning
+rate being too large to settle rather than at a lack of epochs.
