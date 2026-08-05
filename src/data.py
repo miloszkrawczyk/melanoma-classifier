@@ -15,9 +15,9 @@ from src.config import (
     BENIGN_CLASSES,
     CLASS_NAMES,
     CLASSES,
+    HAM10000_MEAN,
+    HAM10000_STD,
     IMAGE_SIZE,
-    IMAGENET_MEAN,
-    IMAGENET_STD,
     IMAGES_DIR,
     MALIGNANT,
     MALIGNANT_CLASSES,
@@ -82,13 +82,18 @@ def split_metadata(metadata):
     return train, val, test
 
 
-def build_transform():
-    """The recipe every photo goes through on its way into the network."""
+def build_transform(mean=HAM10000_MEAN, std=HAM10000_STD):
+    """The recipe every photo goes through on its way into the network.
+
+    Defaults to the statistics of our own training images, which is what the
+    network trained from scratch wants. The pretrained ResNet gets the
+    ImageNet pair passed in instead, because that is what it was built on.
+    """
     return transforms.Compose(
         [
             transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
             transforms.ToTensor(),
-            transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+            transforms.Normalize(mean=mean, std=std),
         ]
     )
 

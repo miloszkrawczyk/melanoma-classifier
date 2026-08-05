@@ -61,8 +61,16 @@ VAL_RATIO: float = 0.15
 # slow to train on. 224x224 is the size ImageNet models were built around.
 IMAGE_SIZE: int = 224
 
-# Channel means and standard deviations measured across ImageNet. A model
-# pretrained there was fed input scaled exactly this way, so handing it
-# anything else costs accuracy for no reason.
+# Channel means and deviations of the training images, measured by
+# scripts/compute_stats.py over all 6986 of them. Skin close-ups come out
+# much brighter, much redder and far more alike than internet photos, so
+# the ImageNet figures below would centre the data in the wrong place.
+# These belong to the network trained from scratch.
+HAM10000_MEAN: tuple = (0.764, 0.546, 0.571)
+HAM10000_STD: tuple = (0.140, 0.152, 0.169)
+
+# The same two figures measured across ImageNet. A model pretrained there
+# was fed input scaled exactly this way, so handing it anything else costs
+# accuracy for no reason. These belong to the ResNet.
 IMAGENET_MEAN: tuple = (0.485, 0.456, 0.406)
 IMAGENET_STD: tuple = (0.229, 0.224, 0.225)
