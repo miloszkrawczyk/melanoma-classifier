@@ -43,3 +43,14 @@ BENIGN_CLASSES: tuple = ("bkl", "df", "nv", "vasc")
 
 MALIGNANT: str = "malignant"
 BENIGN: str = "benign"
+
+
+# *** Splitting the data ***
+# A fixed seed keeps the same lesions in the same set on every run. Without
+# it each training run would be scored against a different test set, and
+# comparing two runs would tell me nothing.
+SEED: int = 42
+
+# Test gets whatever is left, so these two ratios decide all three sizes.
+TRAIN_RATIO: float = 0.70
+VAL_RATIO: float = 0.15
