@@ -9,6 +9,7 @@ import pytest
 from src.config import CLASSES, IMAGE_SIZE
 from src.data import (
     SkinLesionDataset,
+    build_dataloaders,
     build_transform,
     load_metadata,
     split_metadata,
@@ -67,6 +68,15 @@ def test_dataset_length_matches_the_metadata():
     dataset = SkinLesionDataset(train, build_transform())
 
     assert len(dataset) == len(train)
+
+
+def test_dataloader_stacks_images_into_a_batch():
+    train_loader, _, _ = build_dataloaders(batch_size=8)
+
+    images, labels = next(iter(train_loader))
+
+    assert tuple(images.shape) == (8, 3, IMAGE_SIZE, IMAGE_SIZE)
+    assert tuple(labels.shape) == (8,)
 
 
 def test_split_is_repeatable():

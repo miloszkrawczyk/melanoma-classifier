@@ -7,10 +7,11 @@ import random
 
 import pandas as pd
 from PIL import Image
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
 from src.config import (
+    BATCH_SIZE,
     BENIGN,
     BENIGN_CLASSES,
     CLASS_NAMES,
@@ -126,3 +127,28 @@ class SkinLesionDataset(Dataset):
         # convert("RGB") so a stray grayscale file still comes out 3 channels.
         image = Image.open(image_path).convert("RGB")
         return self.transform(image), self.labels[index]
+
+
+def build_dataloaders(batch_size=BATCH_SIZE, transform=None):
+    """One loader per split, each handing out batches instead of single images.
+
+    Only the training loader shuffles. Validation and test are only ever read
+    end to end for a score, and keeping their order fixed makes two runs
+    directly comparable.
+    """
+    if transform is None:
+        transform = build_transform()
+
+    train, val, test = split_metadata(load_metadata())
+
+    train_loader = DataLoader(
+        SkinLesionDataset(train, transform), batch_size=batch_size, shuffle=True
+    )
+    val_loader = DataLoader(
+        SkinLesionDataset(val, transform), batch_size=batch_size, shuffle=False
+    )
+    test_loader = DataLoader(
+        SkinLesionDataset(test, transform), batch_size=batch_size, shuffle=False
+    )
+
+    return train_loader, val_loader, test_loader
