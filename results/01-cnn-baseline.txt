@@ -1,0 +1,104 @@
+SkinLesionCNN, first run, no augmentation
+=========================================
+
+Written up so the README has real numbers to quote at the end of the project.
+This is the baseline everything later gets compared against.
+
+Setup
+-----
+model            SkinLesionCNN, 4 conv blocks, 391,175 parameters
+input            224x224 RGB
+normalisation    HAM10000 training statistics
+                 mean (0.764, 0.546, 0.571), std (0.140, 0.152, 0.169)
+loss             CrossEntropyLoss with class weights (inverse frequency)
+optimiser        Adam, lr 0.001
+batch size       32
+epochs           15
+device           mps
+split            by lesion_id, seed 42, 70/15/15
+augmentation     none
+train/val/test   6986 / 1521 / 1508 images
+
+Training
+--------
+epoch  1: train loss 1.6523, val loss 1.2561, val accuracy 47.21%  <- saved
+epoch  2: train loss 1.5131, val loss 1.4914, val accuracy 42.80%
+epoch  3: train loss 1.4636, val loss 1.1506, val accuracy 54.24%  <- saved
+epoch  4: train loss 1.4077, val loss 1.5013, val accuracy 36.82%
+epoch  5: train loss 1.4248, val loss 1.5254, val accuracy 44.97%
+epoch  6: train loss 1.3582, val loss 1.5176, val accuracy 46.61%
+epoch  7: train loss 1.3565, val loss 1.2455, val accuracy 52.33%
+epoch  8: train loss 1.3386, val loss 1.1323, val accuracy 55.49%  <- saved
+epoch  9: train loss 1.3078, val loss 1.2194, val accuracy 53.52%
+epoch 10: train loss 1.3041, val loss 1.0843, val accuracy 57.33%  <- saved
+epoch 11: train loss 1.2588, val loss 1.0367, val accuracy 59.37%  <- saved
+epoch 12: train loss 1.2614, val loss 1.3498, val accuracy 52.33%
+epoch 13: train loss 1.2704, val loss 1.2174, val accuracy 53.91%
+epoch 14: train loss 1.2469, val loss 1.2550, val accuracy 54.31%
+epoch 15: train loss 1.2392, val loss 1.1875, val accuracy 56.74%
+
+best validation loss 1.0367 at epoch 11, and those are the saved weights
+
+Validation results
+------------------
+1521 images. The test set has not been touched.
+
+confusion matrix, rows are the real diagnosis, columns what the model guessed
+
+         akiec    bcc    bkl     df    mel     nv   vasc
+akiec       20     10      7      5      1      2      1
+bcc         14     32      8     10      0      3      2
+bkl         14     17     95     10     19     12      2
+df           4      5      2      5      0      3      2
+mel          9     10     46      5     82     24      2
+nv          22     76    117     30     93    655     29
+vasc         0      0      0      1      0      1     14
+
+class    support   recall  precision
+akiec         46   43.5%      24.1%
+bcc           69   46.4%      21.3%
+bkl          169   56.2%      34.5%
+df            21   23.8%       7.6%
+mel          178   46.1%      42.1%
+nv          1022   64.1%      93.6%
+vasc          16   87.5%      26.9%
+
+accuracy 59.4%, against 67.2% for a model that answers nv every time
+
+malignant lesions found   178
+malignant lesions missed  115
+false alarms              250
+recall on malignant       60.8%
+precision on malignant    41.6%
+
+What the numbers say
+--------------------
+The class weights did their job. nv has 93.6% precision against only 64.1%
+recall, meaning the network is reluctant to answer "ordinary mole" but is
+almost always right when it does. That reluctance is exactly what the 12:1
+penalty was for, and it is also why accuracy sits below the naive baseline.
+
+The level is still poor. 60.8% recall on malignant lesions means four cancers
+in ten go unnoticed, alongside 250 false alarms.
+
+The mel row is the one that matters. Of 178 melanomas the network found 82,
+called 46 of them benign keratosis, and called 24 an ordinary mole. Those 24
+are the dangerous errors: a patient hears "nothing to worry about". Melanoma
+against benign keratosis is a genuinely hard pair, hard for dermatologists
+too, so that confusion is at least the expected kind.
+
+df came out at 23.8% recall and 7.6% precision on 82 training examples. No
+weighting invents information that is not there.
+
+vasc is the opposite shape: 87.5% recall against 26.9% precision. Vascular
+lesions are red and easy to spot, and with a weight of 9.42 the network would
+rather over-call them than miss one.
+
+Training loss was still falling at epoch 15 and never came close to zero, so
+this is underfitting rather than overfitting. Validation loss swung between
+1.04 and 1.53 between neighbouring epochs, which points at the small
+validation set and at rare classes carrying enormous weight in the average.
+
+Next
+----
+augmentation, then more epochs, then a pretrained ResNet18 to compare against
