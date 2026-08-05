@@ -18,3 +18,8 @@ dev = [
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[tool.ruff.lint]
+# "import torch.nn as nn" is what PyTorch's own docs and every tutorial use.
+# Ruff would rather have "from torch import nn"; the convention wins.
+ignore = ["PLR0402"]
