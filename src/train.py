@@ -79,7 +79,7 @@ if __name__ == "__main__":
     device = pick_device()
     print(f"training on {device}")
 
-    train_loader, val_loader, _ = build_dataloaders()
+    train_loader, val_loader, _ = build_dataloaders(augment=True)
     train_metadata, _, _ = split_metadata(load_metadata())
 
     model = SkinLesionCNN().to(device)

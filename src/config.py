@@ -75,6 +75,11 @@ HAM10000_STD: tuple = (0.140, 0.152, 0.169)
 IMAGENET_MEAN: tuple = (0.485, 0.456, 0.406)
 IMAGENET_STD: tuple = (0.229, 0.224, 0.225)
 
+# How far a training photo may be turned. Any angle is a fair example of the
+# same lesion, but a full 180 leaves large empty corners after the rotation,
+# so this stays modest.
+ROTATION_DEGREES: int = 20
+
 
 # *** Training ***
 # How many images the network looks at before it updates its weights. Small

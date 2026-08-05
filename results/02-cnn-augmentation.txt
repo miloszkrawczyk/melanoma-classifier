@@ -1,0 +1,141 @@
+SkinLesionCNN with augmentation
+===============================
+
+Same model, same 15 epochs, same everything as 01. The only change is that
+training photos now get flipped, turned and nudged in brightness before the
+network sees them.
+
+Setup
+-----
+model            SkinLesionCNN, 4 conv blocks, 391,175 parameters
+input            224x224 RGB
+augmentation     RandomHorizontalFlip, RandomVerticalFlip,
+                 RandomRotation(20), ColorJitter(0.2, 0.2, 0.1)
+                 training set only, validation and test untouched
+normalisation    HAM10000 training statistics
+loss             CrossEntropyLoss with class weights (inverse frequency)
+optimiser        Adam, lr 0.001
+batch size       32
+epochs           15
+device           mps
+split            by lesion_id, seed 42, 70/15/15
+train/val/test   6986 / 1521 / 1508 images
+
+Training
+--------
+epoch  1: train loss 1.7467, val loss 1.3638, val accuracy 52.33%  <- saved
+epoch  2: train loss 1.6378, val loss 1.3934, val accuracy 46.68%
+epoch  3: train loss 1.5869, val loss 1.3243, val accuracy 47.01%  <- saved
+epoch  4: train loss 1.5428, val loss 1.4025, val accuracy 47.01%
+epoch  5: train loss 1.5396, val loss 1.4533, val accuracy 44.31%
+epoch  6: train loss 1.4636, val loss 1.3162, val accuracy 48.06%  <- saved
+epoch  7: train loss 1.4234, val loss 1.2105, val accuracy 50.43%  <- saved
+epoch  8: train loss 1.4658, val loss 1.2126, val accuracy 54.70%
+epoch  9: train loss 1.4246, val loss 1.2737, val accuracy 52.79%
+epoch 10: train loss 1.4178, val loss 1.1575, val accuracy 56.15%  <- saved
+epoch 11: train loss 1.4064, val loss 1.0899, val accuracy 59.17%  <- saved
+epoch 12: train loss 1.4004, val loss 1.2614, val accuracy 51.28%
+epoch 13: train loss 1.3788, val loss 1.1977, val accuracy 53.58%
+epoch 14: train loss 1.3998, val loss 1.1761, val accuracy 57.13%
+epoch 15: train loss 1.3427, val loss 1.0817, val accuracy 57.66%  <- saved
+
+best validation loss 1.0817, at the last epoch
+
+Training curves
+---------------
+
+ 1.75 |  t                                          
+ 1.70 |                                             
+ 1.64 |     t                                       
+ 1.59 |        t                                    
+ 1.54 |           t  t                              
+ 1.49 |                       t                     
+ 1.44 |              v  t  t     t  t               
+ 1.39 |  v  v     v                    t  t  t  t   
+ 1.34 |        v        v                          t
+ 1.29 |                          v        v         
+ 1.24 |                    v  v                     
+ 1.18 |                                      v  v   
+ 1.13 |                             v               
+ 1.08 |                                v           v
+      +---------------------------------------------
+         1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+       epoch
+
+t = train loss, v = val loss, * = both on the same line
+
+Same thing as an image in 02-cnn-augmentation.png
+
+Validation results
+------------------
+1521 images. The test set has not been touched.
+
+confusion matrix, rows are the real diagnosis, columns what the model guessed
+
+         akiec    bcc    bkl     df    mel     nv   vasc
+akiec       32      8      1      0      5      0      0
+bcc         33     27      6      1      1      0      1
+bkl         34     23     56      6     39     10      1
+df           9      1      1      3      0      5      2
+mel         27      2     14      0    128      7      0
+nv          35     46     55      2    258    616     10
+vasc         0      0      0      0      1      0     15
+
+class    support   recall  precision
+akiec         46   69.6%      18.8%
+bcc           69   39.1%      25.2%
+bkl          169   33.1%      42.1%
+df            21   14.3%      25.0%
+mel          178   71.9%      29.6%
+nv          1022   60.3%      96.6%
+vasc          16   93.8%      51.7%
+
+accuracy 57.7%, against 67.2% for a model that answers nv every time
+
+malignant lesions found   263
+malignant lesions missed   30
+false alarms              446
+recall on malignant       89.8%
+precision on malignant    37.1%
+
+Against the baseline
+--------------------
+                          01 baseline   02 augmented
+melanoma recall                 46.1%          71.9%
+melanoma called an ordinary mole   24              7
+recall on malignant             60.8%          89.8%
+malignant lesions missed          115             30
+false alarms                      250            446
+precision on malignant          41.6%          37.1%
+accuracy                        59.4%          57.7%
+best validation loss           1.0367         1.0817
+
+What the numbers say
+--------------------
+Two of the headline numbers got worse and the one that matters got far
+better. Accuracy fell by 1.7 points and validation loss rose slightly, while
+missed cancers dropped from 115 to 30.
+
+The melanoma row explains it. Melanomas called an ordinary mole fell from 24
+to 7, and that is the error with real consequences, because a patient hears
+that nothing is wrong. Meanwhile 27 melanomas were called akiec and 14 bkl.
+The akiec confusion costs nothing in the malignant/benign answer, since akiec
+counts as malignant too, so the binary recall climbs even where the seven-way
+answer is wrong.
+
+The bill comes as false alarms: 446 against 250, and 258 ordinary moles
+called melanoma. For a screening tool that is the right way round, since a
+false alarm sends someone to a dermatologist and a miss sends them home.
+
+Worth noting that validation loss was still falling at epoch 15 and training
+loss sits at 1.3427, well above the 1.2392 of the unaugmented run. That is
+augmentation doing its job: it made the training task harder, so the network
+is now underfitting and has room to keep learning. 15 epochs is no longer
+enough.
+
+df went the other way, 23.8% to 14.3% recall. With 82 training examples and
+random rotations on top, there is too little signal left to hold on to.
+
+Next
+----
+more epochs, since the run had not finished improving, then ResNet18

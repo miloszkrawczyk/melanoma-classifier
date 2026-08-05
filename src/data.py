@@ -23,6 +23,7 @@ from src.config import (
     MALIGNANT,
     MALIGNANT_CLASSES,
     METADATA_CSV,
+    ROTATION_DEGREES,
     SEED,
     TRAIN_RATIO,
     VAL_RATIO,
@@ -83,20 +84,39 @@ def split_metadata(metadata):
     return train, val, test
 
 
-def build_transform(mean=HAM10000_MEAN, std=HAM10000_STD):
+def build_transform(augment=False, mean=HAM10000_MEAN, std=HAM10000_STD):
     """The recipe every photo goes through on its way into the network.
+
+    With augment=True the photo is flipped and turned at random first, which
+    only ever belongs on the training set. Validation and test have to stay
+    identical between runs, otherwise two scores cannot be compared.
 
     Defaults to the statistics of our own training images, which is what the
     network trained from scratch wants. The pretrained ResNet gets the
     ImageNet pair passed in instead, because that is what it was built on.
     """
-    return transforms.Compose(
-        [
-            transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=mean, std=std),
+    steps = [transforms.Resize((IMAGE_SIZE, IMAGE_SIZE))]
+
+    if augment:
+        # A lesion has no top or bottom, so a flipped or turned photo is still
+        # an honest example of the same diagnosis. Faces or text could not be
+        # treated this way.
+        steps += [
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomVerticalFlip(),
+            transforms.RandomRotation(ROTATION_DEGREES),
+            # Dermatoscopes and lighting differ between clinics, so nudging
+            # brightness and contrast keeps the network from leaning on the
+            # look of one particular camera.
+            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1),
         ]
-    )
+
+    steps += [
+        transforms.ToTensor(),
+        transforms.Normalize(mean=mean, std=std),
+    ]
+
+    return transforms.Compose(steps)
 
 
 class SkinLesionDataset(Dataset):
@@ -129,26 +149,26 @@ class SkinLesionDataset(Dataset):
         return self.transform(image), self.labels[index]
 
 
-def build_dataloaders(batch_size=BATCH_SIZE, transform=None):
+def build_dataloaders(batch_size=BATCH_SIZE, augment=False, mean=HAM10000_MEAN, std=HAM10000_STD):
     """One loader per split, each handing out batches instead of single images.
 
-    Only the training loader shuffles. Validation and test are only ever read
-    end to end for a score, and keeping their order fixed makes two runs
-    directly comparable.
+    Only the training loader shuffles, and only it ever gets augmented. The
+    other two are read end to end for a score, so a fixed order and a fixed
+    recipe are what make two runs comparable.
     """
-    if transform is None:
-        transform = build_transform()
+    train_transform = build_transform(augment=augment, mean=mean, std=std)
+    plain_transform = build_transform(augment=False, mean=mean, std=std)
 
     train, val, test = split_metadata(load_metadata())
 
     train_loader = DataLoader(
-        SkinLesionDataset(train, transform), batch_size=batch_size, shuffle=True
+        SkinLesionDataset(train, train_transform), batch_size=batch_size, shuffle=True
     )
     val_loader = DataLoader(
-        SkinLesionDataset(val, transform), batch_size=batch_size, shuffle=False
+        SkinLesionDataset(val, plain_transform), batch_size=batch_size, shuffle=False
     )
     test_loader = DataLoader(
-        SkinLesionDataset(test, transform), batch_size=batch_size, shuffle=False
+        SkinLesionDataset(test, plain_transform), batch_size=batch_size, shuffle=False
     )
 
     return train_loader, val_loader, test_loader
