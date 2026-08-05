@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+
+# uv.lock is committed on purpose, so that the exact versions are reproducible
+
+# HAM10000 images and metadata: ~2.5 GB downloaded from Kaggle.
+# Too big for git and anyone can re-download it with scripts/download_data.py
+data/
+
+# Trained weights. Reproducible by running the training, so nothing to version here.
+*.pth
+
+# Kaggle API token. Never commit this, it is a private key to my account.
+kaggle.json
+
+# Testing and linting caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+
+# IDE
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
