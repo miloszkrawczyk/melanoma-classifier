@@ -73,35 +73,38 @@ def evaluate(model, loader, loss_fn, device):
     return total_loss / len(loader), correct / len(loader.dataset)
 
 
-device = pick_device()
-print(f"training on {device}")
+# Guarded, because evaluate.py imports pick_device and class_weights from
+# here. Without the guard, that import would run the whole training again.
+if __name__ == "__main__":
+    device = pick_device()
+    print(f"training on {device}")
 
-train_loader, val_loader, _ = build_dataloaders()
-train_metadata, _, _ = split_metadata(load_metadata())
+    train_loader, val_loader, _ = build_dataloaders()
+    train_metadata, _, _ = split_metadata(load_metadata())
 
-model = SkinLesionCNN().to(device)
-loss_fn = nn.CrossEntropyLoss(weight=class_weights(train_metadata).to(device))
-optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    model = SkinLesionCNN().to(device)
+    loss_fn = nn.CrossEntropyLoss(weight=class_weights(train_metadata).to(device))
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-# Validation loss decides which weights are worth keeping. Training loss keeps
-# falling even once the network has started memorising, so it cannot be the
-# one to judge.
-best_val_loss = float("inf")
+    # Validation loss decides which weights are worth keeping. Training loss
+    # keeps falling even once the network has started memorising, so it cannot
+    # be the one to judge.
+    best_val_loss = float("inf")
 
-for epoch in range(1, EPOCHS + 1):
-    train_loss = train_one_epoch(model, train_loader, loss_fn, optimizer, device)
-    val_loss, val_accuracy = evaluate(model, val_loader, loss_fn, device)
+    for epoch in range(1, EPOCHS + 1):
+        train_loss = train_one_epoch(model, train_loader, loss_fn, optimizer, device)
+        val_loss, val_accuracy = evaluate(model, val_loader, loss_fn, device)
 
-    line = (
-        f"epoch {epoch:2}: train loss {train_loss:.4f}, "
-        f"val loss {val_loss:.4f}, val accuracy {val_accuracy:.2%}"
-    )
+        line = (
+            f"epoch {epoch:2}: train loss {train_loss:.4f}, "
+            f"val loss {val_loss:.4f}, val accuracy {val_accuracy:.2%}"
+        )
 
-    if val_loss < best_val_loss:
-        best_val_loss = val_loss
-        torch.save(model.state_dict(), WEIGHTS_PATH)
-        line += "  <- saved"
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            torch.save(model.state_dict(), WEIGHTS_PATH)
+            line += "  <- saved"
 
-    print(line)
+        print(line)
 
-print(f"best validation loss: {best_val_loss:.4f}, weights in {WEIGHTS_PATH.name}")
+    print(f"best validation loss: {best_val_loss:.4f}, weights in {WEIGHTS_PATH.name}")
