@@ -81,3 +81,16 @@ IMAGENET_STD: tuple = (0.229, 0.224, 0.225)
 # enough to fit in a laptop's memory, large enough that one odd photo cannot
 # drag the whole update off course.
 BATCH_SIZE: int = 32
+
+# How many times the network works through the whole training set. Same
+# number as the MNIST project, and a starting point rather than a finding.
+EPOCHS: int = 15
+
+# How big a step the optimiser takes. 0.001 is Adam's own default and a
+# sensible place to start; too high and the loss bounces, too low and the
+# training crawls.
+LEARNING_RATE: float = 0.001
+
+# Trained weights land here. Gitignored, since running the training rebuilds
+# them and a binary blob is not worth versioning.
+WEIGHTS_PATH: Path = PROJECT_ROOT / "model_weights.pth"
