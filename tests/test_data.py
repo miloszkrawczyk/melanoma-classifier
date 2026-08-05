@@ -6,8 +6,15 @@ accuracy just comes out too high. A test is the only thing that catches it.
 
 import pytest
 
-from src.config import CLASSES
-from src.data import load_metadata, split_metadata, to_category, to_class_index
+from src.config import CLASSES, IMAGE_SIZE
+from src.data import (
+    SkinLesionDataset,
+    build_transform,
+    load_metadata,
+    split_metadata,
+    to_category,
+    to_class_index,
+)
 
 
 def test_class_index_matches_position_in_classes():
@@ -43,6 +50,23 @@ def test_split_keeps_every_row():
     train, val, test = split_metadata(metadata)
 
     assert len(train) + len(val) + len(test) == len(metadata)
+
+
+def test_dataset_returns_a_tensor_and_a_label():
+    train, _, _ = split_metadata(load_metadata())
+    dataset = SkinLesionDataset(train, build_transform())
+
+    image, label = dataset[0]
+
+    assert tuple(image.shape) == (3, IMAGE_SIZE, IMAGE_SIZE)
+    assert label in range(len(CLASSES))
+
+
+def test_dataset_length_matches_the_metadata():
+    train, _, _ = split_metadata(load_metadata())
+    dataset = SkinLesionDataset(train, build_transform())
+
+    assert len(dataset) == len(train)
 
 
 def test_split_is_repeatable():

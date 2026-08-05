@@ -54,3 +54,15 @@ SEED: int = 42
 # Test gets whatever is left, so these two ratios decide all three sizes.
 TRAIN_RATIO: float = 0.70
 VAL_RATIO: float = 0.15
+
+
+# *** Preparing the images ***
+# The photos are 600x450, which is more detail than the network needs and
+# slow to train on. 224x224 is the size ImageNet models were built around.
+IMAGE_SIZE: int = 224
+
+# Channel means and standard deviations measured across ImageNet. A model
+# pretrained there was fed input scaled exactly this way, so handing it
+# anything else costs accuracy for no reason.
+IMAGENET_MEAN: tuple = (0.485, 0.456, 0.406)
+IMAGENET_STD: tuple = (0.229, 0.224, 0.225)

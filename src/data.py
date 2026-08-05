@@ -1,16 +1,24 @@
-"""Reading HAM10000 metadata, turning a diagnosis code into the number the
-model is trained on, and splitting the rows into train, validation and test.
+"""Everything between the raw dataset and the network: reading the metadata,
+turning a diagnosis code into a number, splitting the rows into train,
+validation and test, and handing out images one at a time as tensors.
 """
 
 import random
 
 import pandas as pd
+from PIL import Image
+from torch.utils.data import Dataset
+from torchvision import transforms
 
 from src.config import (
     BENIGN,
     BENIGN_CLASSES,
     CLASS_NAMES,
     CLASSES,
+    IMAGE_SIZE,
+    IMAGENET_MEAN,
+    IMAGENET_STD,
+    IMAGES_DIR,
     MALIGNANT,
     MALIGNANT_CLASSES,
     METADATA_CSV,
@@ -72,3 +80,44 @@ def split_metadata(metadata):
     test = metadata[metadata["lesion_id"].isin(test_ids)]
 
     return train, val, test
+
+
+def build_transform():
+    """The recipe every photo goes through on its way into the network."""
+    return transforms.Compose(
+        [
+            transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+        ]
+    )
+
+
+class SkinLesionDataset(Dataset):
+    """Hands out one image at a time, already resized and turned into a tensor.
+
+    PyTorch only asks a dataset two things: how many examples it holds, and
+    what example number i looks like. Batching and shuffling are the
+    DataLoader's job, built on top of those two answers.
+
+    Nothing is read up front. All 10015 photos decoded at once would take
+    around 8 GB of memory and most of them would sit there unused, since the
+    network works through 32 at a time.
+    """
+
+    def __init__(self, metadata, transform):
+        # Plain lists rather than the DataFrame. The split leaves gaps in the
+        # row numbers, so metadata["image_id"][0] can raise a KeyError even
+        # though the table is not empty.
+        self.image_ids = list(metadata["image_id"])
+        self.labels = list(metadata["label"])
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.image_ids)
+
+    def __getitem__(self, index):
+        image_path = IMAGES_DIR / f"{self.image_ids[index]}.jpg"
+        # convert("RGB") so a stray grayscale file still comes out 3 channels.
+        image = Image.open(image_path).convert("RGB")
+        return self.transform(image), self.labels[index]
