@@ -99,6 +99,8 @@ EPOCHS: int = 40
 # training crawls.
 LEARNING_RATE: float = 0.001
 
-# Trained weights land here. Gitignored, since running the training rebuilds
-# them and a binary blob is not worth versioning.
-WEIGHTS_PATH: Path = PROJECT_ROOT / "model_weights.pth"
+# Trained weights land here, one file per model so training the ResNet does
+# not quietly wipe out the CNN. Gitignored, since running the training
+# rebuilds them and a binary blob is not worth versioning.
+WEIGHTS_DIR: Path = PROJECT_ROOT / "weights"
+CNN_WEIGHTS: Path = WEIGHTS_DIR / "cnn.pth"

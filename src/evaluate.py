@@ -15,9 +15,9 @@ import sys
 
 import torch
 
-from src.config import CLASSES, MALIGNANT_CLASSES, WEIGHTS_PATH
+from src.config import CLASSES, CNN_WEIGHTS, MALIGNANT_CLASSES
 from src.data import build_dataloaders
-from src.model import SkinLesionCNN
+from src.models.cnn import SkinLesionCNN
 from src.train import pick_device
 
 MALIGNANT_INDEXES = [CLASSES.index(dx) for dx in MALIGNANT_CLASSES]
@@ -97,7 +97,7 @@ train_loader, val_loader, test_loader = build_dataloaders()
 loader = test_loader if split == "test" else val_loader
 
 model = SkinLesionCNN().to(device)
-model.load_state_dict(torch.load(WEIGHTS_PATH, map_location=device))
+model.load_state_dict(torch.load(CNN_WEIGHTS, map_location=device))
 
 predicted, actual = collect_predictions(model, loader, device)
 matrix = confusion_matrix(predicted, actual)

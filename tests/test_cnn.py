@@ -5,7 +5,7 @@ nothing about the answers worth asserting yet.
 import torch
 
 from src.config import BATCH_SIZE, CLASSES, IMAGE_SIZE
-from src.model import SkinLesionCNN
+from src.models.cnn import SkinLesionCNN
 
 
 def test_model_output_shape():

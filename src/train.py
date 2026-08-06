@@ -11,9 +11,9 @@ the ones that did best on photos the network never trained on.
 import torch
 import torch.nn as nn
 
-from src.config import CLASSES, EPOCHS, LEARNING_RATE, WEIGHTS_PATH
+from src.config import CLASSES, CNN_WEIGHTS, EPOCHS, LEARNING_RATE, WEIGHTS_DIR
 from src.data import build_dataloaders, load_metadata, split_metadata
-from src.model import SkinLesionCNN
+from src.models.cnn import SkinLesionCNN
 
 
 def pick_device():
@@ -76,6 +76,8 @@ def evaluate(model, loader, loss_fn, device):
 # Guarded, because evaluate.py imports pick_device and class_weights from
 # here. Without the guard, that import would run the whole training again.
 if __name__ == "__main__":
+    WEIGHTS_DIR.mkdir(exist_ok=True)
+
     device = pick_device()
     print(f"training on {device}")
 
@@ -102,9 +104,9 @@ if __name__ == "__main__":
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            torch.save(model.state_dict(), WEIGHTS_PATH)
+            torch.save(model.state_dict(), CNN_WEIGHTS)
             line += "  <- saved"
 
         print(line)
 
-    print(f"best validation loss: {best_val_loss:.4f}, weights in {WEIGHTS_PATH.name}")
+    print(f"best validation loss: {best_val_loss:.4f}, weights in {CNN_WEIGHTS.name}")
