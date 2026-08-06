@@ -1,5 +1,11 @@
-"""Training loop for SkinLesionCNN: forward pass, loss, backward pass,
+"""Training loop shared by both models: forward pass, loss, backward pass,
 optimiser step, repeated over batches and epochs.
+
+    uv run python -m src.train cnn       # the network built here
+    uv run python -m src.train resnet    # the pretrained one
+
+The loop is the same either way. What differs between the two, the learning
+rate, the epoch count and the normalisation, lives in config.MODELS.
 
 Two things here that the MNIST project did not need. The loss carries class
 weights, because nv accounts for two thirds of the data and without them the
@@ -8,12 +14,24 @@ ends with a pass over the validation set, so the weights that get saved are
 the ones that did best on photos the network never trained on.
 """
 
+import sys
+
 import torch
 import torch.nn as nn
 
-from src.config import CLASSES, CNN_WEIGHTS, EPOCHS, LEARNING_RATE, WEIGHTS_DIR
+from src.config import CLASSES, MODELS, WEIGHTS_DIR
 from src.data import build_dataloaders, load_metadata, split_metadata
 from src.models.cnn import SkinLesionCNN
+from src.models.resnet import build_resnet18
+
+
+def build_model(name):
+    """Build the network asked for on the command line."""
+    if name == "cnn":
+        return SkinLesionCNN()
+    if name == "resnet":
+        return build_resnet18()
+    raise SystemExit(f'expected "cnn" or "resnet", got "{name}"')
 
 
 def pick_device():
@@ -76,24 +94,30 @@ def evaluate(model, loader, loss_fn, device):
 # Guarded, because evaluate.py imports pick_device and class_weights from
 # here. Without the guard, that import would run the whole training again.
 if __name__ == "__main__":
+    name = sys.argv[1] if len(sys.argv) > 1 else "cnn"
+    model = build_model(name)
+    settings = MODELS[name]
+
     WEIGHTS_DIR.mkdir(exist_ok=True)
 
     device = pick_device()
-    print(f"training on {device}")
+    print(f"training {name} on {device}")
 
-    train_loader, val_loader, _ = build_dataloaders(augment=True)
+    train_loader, val_loader, _ = build_dataloaders(
+        augment=True, mean=settings["mean"], std=settings["std"]
+    )
     train_metadata, _, _ = split_metadata(load_metadata())
 
-    model = SkinLesionCNN().to(device)
+    model = model.to(device)
     loss_fn = nn.CrossEntropyLoss(weight=class_weights(train_metadata).to(device))
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=settings["learning_rate"])
 
     # Validation loss decides which weights are worth keeping. Training loss
     # keeps falling even once the network has started memorising, so it cannot
     # be the one to judge.
     best_val_loss = float("inf")
 
-    for epoch in range(1, EPOCHS + 1):
+    for epoch in range(1, settings["epochs"] + 1):
         train_loss = train_one_epoch(model, train_loader, loss_fn, optimizer, device)
         val_loss, val_accuracy = evaluate(model, val_loader, loss_fn, device)
 
@@ -104,9 +128,9 @@ if __name__ == "__main__":
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            torch.save(model.state_dict(), CNN_WEIGHTS)
+            torch.save(model.state_dict(), settings["weights"])
             line += "  <- saved"
 
         print(line)
 
-    print(f"best validation loss: {best_val_loss:.4f}, weights in {CNN_WEIGHTS.name}")
+    print(f"best validation loss: {best_val_loss:.4f}, weights in {settings['weights']}")

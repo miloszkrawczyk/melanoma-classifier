@@ -4,21 +4,22 @@ Two thirds of the dataset are ordinary moles, so a model answering "nv" every
 time scores 67% and is worth nothing. What matters is how many of the actual
 malignant lesions it caught, and that only shows up per class.
 
-Defaults to the validation set. The test set is for the very end, once there
-is nothing left to tune, so pass "test" deliberately:
+Takes the model to score and, optionally, which split to score it on. The
+test set is for the very end, once there is nothing left to tune, so it has
+to be asked for deliberately:
 
-    uv run python -m src.evaluate          # while still working on the model
-    uv run python -m src.evaluate test     # once, for the README
+    uv run python -m src.evaluate cnn           # validation, day to day
+    uv run python -m src.evaluate resnet        # validation
+    uv run python -m src.evaluate resnet test   # once, for the README
 """
 
 import sys
 
 import torch
 
-from src.config import CLASSES, CNN_WEIGHTS, MALIGNANT_CLASSES
+from src.config import CLASSES, MALIGNANT_CLASSES, MODELS
 from src.data import build_dataloaders
-from src.models.cnn import SkinLesionCNN
-from src.train import pick_device
+from src.train import build_model, pick_device
 
 MALIGNANT_INDEXES = [CLASSES.index(dx) for dx in MALIGNANT_CLASSES]
 
@@ -88,21 +89,30 @@ def print_binary(predicted, actual):
     print(f"precision on malignant:   {caught / (caught + false_alarms):.1%}")
 
 
-split = sys.argv[1] if len(sys.argv) > 1 else "val"
+name = sys.argv[1] if len(sys.argv) > 1 else "cnn"
+model = build_model(name)
+settings = MODELS[name]
+
+split = sys.argv[2] if len(sys.argv) > 2 else "val"
 if split not in ("val", "test"):
     raise SystemExit(f'expected "val" or "test", got "{split}"')
 
 device = pick_device()
-train_loader, val_loader, test_loader = build_dataloaders()
+
+# The same normalisation the model was trained with. Feeding it the other
+# pair would quietly cost accuracy with nothing to show why.
+_, val_loader, test_loader = build_dataloaders(
+    mean=settings["mean"], std=settings["std"]
+)
 loader = test_loader if split == "test" else val_loader
 
-model = SkinLesionCNN().to(device)
-model.load_state_dict(torch.load(CNN_WEIGHTS, map_location=device))
+model = model.to(device)
+model.load_state_dict(torch.load(settings["weights"], map_location=device))
 
 predicted, actual = collect_predictions(model, loader, device)
 matrix = confusion_matrix(predicted, actual)
 
-print(f"scoring on the {split} set, {len(actual)} images")
+print(f"scoring {name} on the {split} set, {len(actual)} images")
 print()
 print_confusion_matrix(matrix)
 print()

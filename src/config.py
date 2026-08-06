@@ -87,20 +87,36 @@ ROTATION_DEGREES: int = 20
 # drag the whole update off course.
 BATCH_SIZE: int = 32
 
-# How many times the network works through the whole training set. Started at
-# 15, the same as the MNIST project. Augmentation made the training task hard
-# enough that the best epoch was the last one, so the run was being cut short
-# rather than converging. Only the best epoch is kept, so overshooting costs
-# time and nothing else.
-EPOCHS: int = 40
-
-# How big a step the optimiser takes. 0.001 is Adam's own default and a
-# sensible place to start; too high and the loss bounces, too low and the
-# training crawls.
-LEARNING_RATE: float = 0.001
-
 # Trained weights land here, one file per model so training the ResNet does
 # not quietly wipe out the CNN. Gitignored, since running the training
 # rebuilds them and a binary blob is not worth versioning.
 WEIGHTS_DIR: Path = PROJECT_ROOT / "weights"
-CNN_WEIGHTS: Path = WEIGHTS_DIR / "cnn.pth"
+
+# The two networks need different treatment, so every setting that differs
+# between them lives here rather than being edited by hand between runs.
+MODELS: dict = {
+    "cnn": {
+        "weights": WEIGHTS_DIR / "cnn.pth",
+        # Its own statistics, because nothing constrains a network built here.
+        "mean": HAM10000_MEAN,
+        "std": HAM10000_STD,
+        # Adam's own default. Starting from noise, the first steps have a long
+        # way to travel.
+        "learning_rate": 0.001,
+        # Augmentation made the task hard enough that 15 epochs cut the run
+        # short. Only the best epoch is kept, so overshooting costs time only.
+        "epochs": 40,
+    },
+    "resnet": {
+        "weights": WEIGHTS_DIR / "resnet.pth",
+        # ImageNet's statistics, because that is what its filters were fed
+        # during pretraining.
+        "mean": IMAGENET_MEAN,
+        "std": IMAGENET_STD,
+        # Ten times smaller. Its weights are already good, so the point is to
+        # nudge them, not to knock them out of place.
+        "learning_rate": 0.0001,
+        # Fewer epochs too: it starts most of the way there.
+        "epochs": 15,
+    },
+}
