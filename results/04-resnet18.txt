@@ -1,0 +1,186 @@
+ResNet18, pretrained on ImageNet, fine-tuned here
+=================================================
+
+First model in this project that was not built from scratch. Seventeen
+convolutional layers arrive already trained on 1.28 million photos; only the
+final classifier is new.
+
+Setup
+-----
+model            ResNet18, 11,180,103 parameters
+                 of which 11,176,512 come pretrained, 3,591 start random
+head             Linear(512, 7) replacing ImageNet's Linear(512, 1000)
+input            224x224 RGB
+augmentation     same as the CNN: flips, RandomRotation(20), ColorJitter
+normalisation    ImageNet statistics, because that is what its filters
+                 were fed during pretraining
+loss             CrossEntropyLoss with class weights (inverse frequency)
+optimiser        Adam, lr 0.0001, ten times smaller than the CNN's
+batch size       32
+epochs           15
+device           mps
+split            by lesion_id, seed 42, 70/15/15
+train/val/test   6986 / 1521 / 1508 images
+
+Training
+--------
+epoch  1: train loss 1.1601, val loss 1.1445, val accuracy 56.61%  <- saved
+epoch  2: train loss 0.8206, val loss 0.7399, val accuracy 72.32%  <- saved
+epoch  3: train loss 0.6857, val loss 0.6815, val accuracy 73.64%  <- saved
+epoch  4: train loss 0.6250, val loss 0.7957, val accuracy 69.03%
+epoch  5: train loss 0.5504, val loss 0.8313, val accuracy 70.74%
+epoch  6: train loss 0.5182, val loss 0.7443, val accuracy 71.79%
+epoch  7: train loss 0.4469, val loss 0.6373, val accuracy 78.24%  <- saved
+epoch  8: train loss 0.4073, val loss 0.7396, val accuracy 72.06%
+epoch  9: train loss 0.3476, val loss 0.6393, val accuracy 77.25%
+epoch 10: train loss 0.3914, val loss 0.6961, val accuracy 76.33%
+epoch 11: train loss 0.3442, val loss 0.6457, val accuracy 79.03%
+epoch 12: train loss 0.3003, val loss 0.6400, val accuracy 77.58%
+epoch 13: train loss 0.2912, val loss 0.7634, val accuracy 72.26%
+epoch 14: train loss 0.2913, val loss 0.7345, val accuracy 74.36%
+epoch 15: train loss 0.2505, val loss 0.6849, val accuracy 78.90%
+
+best validation loss 0.6373 at epoch 7
+
+Training curves
+---------------
+
+ 1.16 |  *                                          
+ 1.09 |                                             
+ 1.02 |                                             
+ 0.95 |                                             
+ 0.88 |                                             
+ 0.81 |     t     v  v                              
+ 0.74 |     v           v     v              v  v   
+ 0.67 |        *           v     v  v  v  v        v
+ 0.60 |           t                                 
+ 0.53 |              t  t                           
+ 0.46 |                    t                        
+ 0.39 |                       t     t               
+ 0.32 |                          t     t  t  t  t   
+ 0.25 |                                            t
+      +---------------------------------------------
+         1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+       epoch
+
+t = train loss, v = val loss, * = both on the same line
+
+Same thing as an image in 04-resnet18.png
+
+Validation results, top-class rule
+----------------------------------
+1521 images. The test set has not been touched.
+
+confusion matrix, rows are the real diagnosis, columns what the model guessed
+
+         akiec    bcc    bkl     df    mel     nv   vasc
+akiec       32      2      6      0      5      1      0
+bcc          8     46      1      3      6      2      3
+bkl         13      9     91      0     39     16      1
+df           0      0      0     21      0      0      0
+mel          6      4      5      1    118     41      3
+nv           8     16     18     20     73    867     20
+vasc         0      1      0      0      0      0     15
+
+class    support   recall  precision
+akiec         46   69.6%      47.8%
+bcc           69   66.7%      59.0%
+bkl          169   53.8%      75.2%
+df            21  100.0%      46.7%
+mel          178   66.3%      49.0%
+nv          1022   84.8%      93.5%
+vasc          16   93.8%      35.7%
+
+accuracy 78.2%, against 67.2% for a model that answers nv every time
+
+malignant lesions found   227
+malignant lesions missed   66
+false alarms              159
+recall on malignant       77.5%
+precision on malignant    58.8%
+
+Threshold sweep
+---------------
+Adding up the probability of akiec, bcc and mel and comparing the total
+against a threshold, rather than taking whichever of the seven scores is
+highest.
+
+ threshold   recall  precision   missed  false alarms
+      0.05   99.0%      33.2%        3           583
+      0.10   96.9%      37.5%        9           473
+      0.15   93.9%      41.1%       18           394
+      0.20   90.8%      43.1%       27           351
+      0.25   88.1%      45.7%       35           307
+      0.30   85.3%      48.3%       43           268
+      0.35   82.9%      50.7%       50           236
+      0.40   80.2%      53.2%       58           207
+      0.45   77.8%      55.7%       65           181
+      0.50   76.1%      58.7%       70           157
+      0.55   74.7%      60.8%       74           141
+      0.60   72.4%      63.7%       81           121
+      0.65   69.3%      66.1%       90           104
+      0.70   65.9%      68.4%      100            89
+      0.75   62.1%      70.0%      111            78
+      0.80   56.0%      73.9%      129            58
+      0.85   50.5%      76.3%      145            46
+      0.90   43.0%      81.3%      167            29
+      0.95   28.7%      81.6%      209            19
+
+All four runs
+-------------
+                       01 base   02 augment   03 40 epochs   04 resnet
+accuracy                 59.4%        57.7%          62.2%       78.2%
+recall on malignant      60.8%        89.8%          77.8%       77.5%
+precision on malignant   41.6%        37.1%          44.7%       58.8%
+malignant missed           115           30             65          66
+false alarms               250          446            282         159
+melanoma recall          46.1%        71.9%          68.0%       66.3%
+best validation loss    1.0367       1.0817         0.9478      0.6373
+
+Compared at matched recall, which is the fair way to read it:
+
+                       recall   missed   false alarms
+CNN, threshold 0.30     95.2%       14            507
+resnet, threshold 0.10  96.9%        9            473
+
+CNN, threshold 0.40     89.4%       31            377
+resnet, threshold 0.20  90.8%       27            351
+
+The ResNet wins at every point on the curve: higher recall, fewer misses and
+fewer false alarms at the same time.
+
+What the numbers say
+--------------------
+Read as single figures, the ResNet looks like it barely moved the needle on
+what this project cares about: 77.5% recall against the CNN's 77.8%. That
+reading is wrong, and the threshold sweep shows why.
+
+Both numbers come from the top-class rule, which is an arbitrary operating
+point. What actually changed is the price of recall. To catch 95% of
+malignant lesions the CNN raises 507 false alarms; the ResNet catches 96.9%
+for 473. Every point where the two can be compared, the ResNet is ahead.
+
+Accuracy went from 62.2% to 78.2% and false alarms fell from 282 to 159 at
+the default rule, which says the same thing: the model is right more often
+in both directions.
+
+Per class the gains are large and even. bcc recall went 26.1% to 66.7%, bkl
+precision 44.5% to 75.2%, nv recall 67.8% to 84.8%. df reached 100% recall,
+all 21 of them, though on 21 images that is a fragile number and its 46.7%
+precision shows it still over-calls the class.
+
+Melanoma recall slipped slightly, 68.0% to 66.3%, and 41 melanomas were
+called ordinary moles against the CNN's 10. That looks alarming until you
+notice the CNN reached its number by calling almost everything suspicious;
+it raised 282 false alarms to the ResNet's 159. At a matched operating point
+the ResNet finds more melanomas.
+
+Training loss fell to 0.2505 while validation loss bottomed at 0.6373 in
+epoch 7 and drifted up afterwards. That gap is overfitting starting, and it
+means 15 epochs is already more than this setup needs. Seven would have done.
+
+Next
+----
+Pick an operating threshold, then src/predict.py, then the API. On this
+curve the 0.15 to 0.20 band looks right for a screening tool: 91-94% recall
+for 350-400 false alarms out of 1521 images.
