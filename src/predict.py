@@ -29,6 +29,7 @@ from src.config import (
     SKIN_RED_TOLERANCE,
 )
 from src.device import pick_device
+from src.gradcam import GradCAM, last_conv_layer, overlay
 from src.models.resnet import build_resnet18
 
 MALIGNANT_INDEXES = [CLASSES.index(dx) for dx in MALIGNANT_CLASSES]
@@ -110,6 +111,31 @@ class Predictor:
         self.normalise = transforms.Normalize(
             mean=settings["mean"], std=settings["std"]
         )
+
+        # Built here rather than per request, because it hangs hooks on the
+        # model. Registering them again on every call would stack them up until
+        # the process ran out of memory.
+        self.gradcam = GradCAM(self.model, last_conv_layer(self.model, "resnet"))
+
+    def explain(self, image):
+        """The photo with a heatmap of where the answer came from painted on.
+
+        Two passes through the network, not one: the first to find out which
+        diagnosis won, the second to ask what that particular diagnosis rested
+        on. A heatmap is always about one class, so there is nothing to draw
+        until the class is known.
+        """
+        image = image.convert("RGB").resize((IMAGE_SIZE, IMAGE_SIZE))
+        batch = self.normalise(self.to_tensor(image)).unsqueeze(0).to(self.device)
+
+        with torch.no_grad():
+            top = int(self.model(batch).argmax())
+
+        # No no_grad() around this one. Grad-CAM is built out of gradients, so
+        # switching them off would leave it nothing to work with.
+        cam = self.gradcam.heatmap(batch, top)
+
+        return overlay(image, cam)
 
     def predict(self, image):
         """Answer for one PIL image. Returns a dict ready to be sent as JSON."""
