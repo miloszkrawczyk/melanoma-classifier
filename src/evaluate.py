@@ -19,7 +19,8 @@ import torch
 
 from src.config import CLASSES, MALIGNANT_CLASSES, MODELS
 from src.data import build_dataloaders
-from src.train import build_model, pick_device
+from src.device import pick_device
+from src.train import build_model
 
 MALIGNANT_INDEXES = [CLASSES.index(dx) for dx in MALIGNANT_CLASSES]
 

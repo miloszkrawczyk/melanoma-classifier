@@ -28,7 +28,8 @@ from src.config import (
     SKIN_MIN_SATURATION,
     SKIN_RED_TOLERANCE,
 )
-from src.train import build_model, pick_device
+from src.device import pick_device
+from src.models.resnet import build_resnet18
 
 MALIGNANT_INDEXES = [CLASSES.index(dx) for dx in MALIGNANT_CLASSES]
 
@@ -78,13 +79,19 @@ def looks_like_skin(tensor):
 
 
 class Predictor:
-    """A trained model, loaded once, answering one photo at a time."""
+    """The trained ResNet, loaded once, answering one photo at a time.
 
-    def __init__(self, name="resnet"):
-        settings = MODELS[name]
+    Deliberately hard-wired to the ResNet rather than taking a model name. The
+    CNN exists as a baseline to compare against in the README, and importing it
+    here would drag the training code and pandas into a web service that has no
+    use for either.
+    """
+
+    def __init__(self):
+        settings = MODELS["resnet"]
 
         self.device = pick_device()
-        self.model = build_model(name).to(self.device)
+        self.model = build_resnet18().to(self.device)
         self.model.load_state_dict(
             torch.load(settings["weights"], map_location=self.device)
         )

@@ -26,7 +26,7 @@ app = FastAPI(
 # Built once, when the server starts, and reused for every request. Loading
 # 43 MB of weights takes a second or two, which would be a second or two added
 # to every single request if it happened inside the handler.
-predictor = Predictor("resnet")
+predictor = Predictor()
 
 
 @app.get("/health")
