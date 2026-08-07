@@ -44,6 +44,16 @@ BENIGN_CLASSES: tuple = ("bkl", "df", "nv", "vasc")
 MALIGNANT: str = "malignant"
 BENIGN: str = "benign"
 
+# A lesion counts as malignant when the three malignant classes add up to at
+# least this much, rather than when one of them happens to score highest.
+# Taking the top class treats both mistakes as costing the same, and they do
+# not: a false alarm costs an appointment, a miss can cost a life.
+#
+# Chosen from the sweep in scripts/tune_threshold.py against the ResNet. On
+# the validation set 0.15 misses 18 of 293 malignant lesions and raises 394
+# false alarms out of 1521 images. Taking the top class instead would miss 66.
+MALIGNANT_THRESHOLD: float = 0.15
+
 
 # *** Splitting the data ***
 # A fixed seed keeps the same lesions in the same set on every run. Without
