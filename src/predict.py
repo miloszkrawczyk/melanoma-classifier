@@ -58,9 +58,13 @@ def looks_like_skin(tensor):
     """
     texture = SKIN_MIN_ROUGHNESS <= roughness(tensor) <= SKIN_MAX_ROUGHNESS
 
-    saturation = (tensor.max(dim=0).values - tensor.min(dim=0).values).mean()
+    # float() on every measurement, not just at the end. Comparing tensors
+    # gives back tensors, and "and" hands back whichever operand it stopped
+    # on, so leaving them as tensors makes this return a tensor whenever the
+    # image passes. JSON has no way to write that down.
+    saturation = float((tensor.max(dim=0).values - tensor.min(dim=0).values).mean())
+    red, green, blue = (float(value) for value in tensor.mean(dim=[1, 2]))
 
-    red, green, blue = tensor.mean(dim=[1, 2])
     red_dominant = (
         red >= green - SKIN_RED_TOLERANCE and red >= blue - SKIN_RED_TOLERANCE
     )
