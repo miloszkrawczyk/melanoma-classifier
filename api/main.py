@@ -10,7 +10,9 @@ nothing about HTTP, so it can be called from a test, a script or a notebook
 just as easily.
 """
 
-from fastapi import FastAPI, HTTPException, UploadFile
+from io import BytesIO
+
+from fastapi import FastAPI, HTTPException, Response, UploadFile
 from PIL import Image, UnidentifiedImageError
 
 from src.predict import Predictor
@@ -27,6 +29,16 @@ app = FastAPI(
 # 43 MB of weights takes a second or two, which would be a second or two added
 # to every single request if it happened inside the handler.
 predictor = Predictor()
+
+
+def read_image(file):
+    """Open an upload as a picture, or say plainly that it was not one."""
+    try:
+        return Image.open(file.file)
+    except UnidentifiedImageError:
+        # 400 means "your request was wrong", as against 500 which would mean
+        # "our code broke". Sending a text file here is the caller's mistake.
+        raise HTTPException(status_code=400, detail="that file is not an image")
 
 
 @app.get("/health")
@@ -50,11 +62,27 @@ async def predict(file: UploadFile):
     the model can be sure a lesion is malignant while having no idea which of
     the three malignant diagnoses it is looking at.
     """
-    try:
-        image = Image.open(file.file)
-    except UnidentifiedImageError:
-        # 400 means "your request was wrong", as against 500 which would mean
-        # "our code broke". Sending a text file here is the caller's mistake.
-        raise HTTPException(status_code=400, detail="that file is not an image")
+    return predictor.predict(read_image(file))
 
-    return predictor.predict(image)
+
+@app.post(
+    "/explain",
+    responses={200: {"content": {"image/png": {}}}},
+    response_class=Response,
+)
+async def explain(file: UploadFile):
+    """Return the photo with a heatmap of what the answer rested on.
+
+    An image rather than JSON, because the point is to be looked at. If the
+    heat sits on the lesion the model was reading the right thing; if it sits
+    on a ruler or a hair in the corner, the answer is worth nothing however
+    confident it sounded.
+    """
+    picture = predictor.explain(read_image(file))
+
+    # PNG rather than JPEG. The heatmap has large flat areas of one colour,
+    # which JPEG smears into blotches.
+    buffer = BytesIO()
+    picture.save(buffer, format="PNG")
+
+    return Response(buffer.getvalue(), media_type="image/png")
