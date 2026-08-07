@@ -13,13 +13,21 @@ those would score well and be useless. If the heat lands on the lesion, the
 network is looking at the right thing.
 """
 
-import matplotlib
 import numpy as np
 import torch
 from PIL import Image
 
-matplotlib.use("Agg")
-import matplotlib.cm as cm
+# The blue-to-red ramp everyone recognises from heatmaps, written out rather
+# than imported. matplotlib carries it, but pulling 40 MB of plotting library
+# into a web service for six colours is a poor trade.
+COLOUR_STOPS = (
+    (0.0, (0, 0, 143)),
+    (0.125, (0, 0, 255)),
+    (0.375, (0, 255, 255)),
+    (0.625, (255, 255, 0)),
+    (0.875, (255, 0, 0)),
+    (1.0, (128, 0, 0)),
+)
 
 
 class GradCAM:
@@ -67,6 +75,16 @@ class GradCAM:
         return cam.cpu()
 
 
+def colourise(values):
+    """Turn a 0-1 array into RGB along the blue-to-red ramp."""
+    positions = [position for position, _ in COLOUR_STOPS]
+    channels = [
+        np.interp(values, positions, [colour[i] for _, colour in COLOUR_STOPS])
+        for i in range(3)
+    ]
+    return np.stack(channels, axis=-1).astype(np.uint8)
+
+
 def overlay(image, cam, alpha=0.5):
     """Paint the heatmap over the photo, red where it mattered most."""
     size = image.size
@@ -76,8 +94,7 @@ def overlay(image, cam, alpha=0.5):
     heat = Image.fromarray((cam.numpy() * 255).astype(np.uint8), mode="L")
     heat = heat.resize(size, Image.BICUBIC)
 
-    coloured = cm.jet(np.array(heat) / 255.0)[:, :, :3]
-    coloured = Image.fromarray((coloured * 255).astype(np.uint8), mode="RGB")
+    coloured = Image.fromarray(colourise(np.array(heat) / 255.0), mode="RGB")
 
     return Image.blend(image.convert("RGB"), coloured, alpha)
 

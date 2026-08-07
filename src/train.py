@@ -21,6 +21,7 @@ import torch.nn as nn
 
 from src.config import CLASSES, MODELS, WEIGHTS_DIR
 from src.data import build_dataloaders, load_metadata, split_metadata
+from src.device import pick_device
 from src.models.cnn import SkinLesionCNN
 from src.models.resnet import build_resnet18
 
@@ -32,15 +33,6 @@ def build_model(name):
     if name == "resnet":
         return build_resnet18()
     raise SystemExit(f'expected "cnn" or "resnet", got "{name}"')
-
-
-def pick_device():
-    """Use the Mac's graphics chip if it is there, otherwise the processor."""
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    return torch.device("cpu")
 
 
 def class_weights(metadata):
@@ -91,8 +83,8 @@ def evaluate(model, loader, loss_fn, device):
     return total_loss / len(loader), correct / len(loader.dataset)
 
 
-# Guarded, because evaluate.py imports pick_device and class_weights from
-# here. Without the guard, that import would run the whole training again.
+# Guarded, because evaluate.py imports build_model from here. Without the
+# guard, that import would run the whole training again.
 if __name__ == "__main__":
     name = sys.argv[1] if len(sys.argv) > 1 else "cnn"
     model = build_model(name)

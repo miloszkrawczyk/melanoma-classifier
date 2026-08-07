@@ -37,6 +37,17 @@ def test_skin_like_image_is_accepted():
     assert looks_like_skin(skin_like_tensor())
 
 
+def test_answer_is_a_plain_bool():
+    """`is True` rather than a truthiness check, on purpose.
+
+    A torch tensor passes a plain assert, so the earlier version of this test
+    went green while the function returned tensor(True). FastAPI could not
+    turn that into JSON and served an empty object instead.
+    """
+    assert looks_like_skin(skin_like_tensor()) is True
+    assert looks_like_skin(torch.full((3, 224, 224), 0.5)) is False
+
+
 def test_noise_is_rejected():
     torch.manual_seed(0)
     assert not looks_like_skin(torch.rand(3, 224, 224))
