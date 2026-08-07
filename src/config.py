@@ -54,6 +54,18 @@ BENIGN: str = "benign"
 # false alarms out of 1521 images. Taking the top class instead would miss 66.
 MALIGNANT_THRESHOLD: float = 0.15
 
+# Below this much confidence in the winning diagnosis, the answer is not worth
+# naming. Measured on the validation set: the model is right 53% of the time
+# when it scores 0.50-0.60 and 93% when it scores above 0.90, so the number
+# means something. At 0.60 it declines to name 17% of images and the diagnoses
+# it does give are right 84.2% of the time, against 78.2% for answering
+# everything.
+#
+# This gates the seven-class diagnosis only. The malignant/benign call stands
+# either way, since it adds three probabilities up and survives the model
+# being unsure which of the three it is looking at.
+CONFIDENCE_THRESHOLD: float = 0.60
+
 
 # *** Splitting the data ***
 # A fixed seed keeps the same lesions in the same set on every run. Without

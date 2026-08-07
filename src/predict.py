@@ -15,6 +15,7 @@ from src.config import (
     BENIGN,
     CLASS_NAMES,
     CLASSES,
+    CONFIDENCE_THRESHOLD,
     MALIGNANT,
     MALIGNANT_CLASSES,
     MALIGNANT_THRESHOLD,
@@ -59,12 +60,18 @@ class Predictor:
             probabilities = torch.softmax(logits, dim=1)[0].cpu()
 
         top = int(probabilities.argmax())
+        confidence = float(probabilities[top])
         malignant_probability = float(probabilities[MALIGNANT_INDEXES].sum())
 
         return {
             "diagnosis": CLASSES[top],
             "name": CLASS_NAMES[CLASSES[top]],
-            "confidence": float(probabilities[top]),
+            "confidence": confidence,
+            # False means the named diagnosis is a coin toss and should not be
+            # shown as an answer. The category below is unaffected: the model
+            # can be sure a lesion is malignant while unsure which of the three
+            # malignant diagnoses it is.
+            "confident": confidence >= CONFIDENCE_THRESHOLD,
             "malignant_probability": malignant_probability,
             "category": (
                 MALIGNANT
