@@ -19,6 +19,13 @@ data/
 # Kaggle API token. Never commit this, it is a private key to my account.
 kaggle.json
 
+# Secrets for deployment. Nothing in here has a place in a public repo.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
 # Testing and linting caches
 .pytest_cache/
 .ruff_cache/
