@@ -67,6 +67,32 @@ MALIGNANT_THRESHOLD: float = 0.15
 CONFIDENCE_THRESHOLD: float = 0.60
 
 
+# *** Turning away photos that are not skin lesions ***
+# A classifier can only ever answer with one of the classes it was taught. Ask
+# it about a checkerboard and it names a diagnosis, confidently. Measured on
+# random noise it returned "bkl" at 86.5% certainty, so the confidence gate
+# above does not catch this on its own.
+#
+# These bounds come from 153 validation images. Roughness is the average
+# brightness change between neighbouring pixels: noise sits at 0.22, a flat
+# colour at 0.0, real photos between 0.0040 and 0.0494. The margins are wide
+# on purpose, since turning away a real lesion is the worse mistake.
+SKIN_MIN_ROUGHNESS: float = 0.002
+SKIN_MAX_ROUGHNESS: float = 0.08
+
+# Skin close-ups are red-dominant: red was the strongest channel in 98% of the
+# sample, and never averaged below 0.461. The tolerance leaves room for the
+# other 2% rather than turning them away.
+SKIN_MIN_RED: float = 0.35
+SKIN_RED_TOLERANCE: float = 0.05
+
+# Saturation is the average gap between a pixel's brightest and dimmest
+# channel. A greyscale image sits at 0.0, real skin between 0.0509 and
+# 0.4232 in the sample. This is what turns away a grey checkerboard, which
+# slips past the red check by having every channel equal.
+SKIN_MIN_SATURATION: float = 0.03
+
+
 # *** Splitting the data ***
 # A fixed seed keeps the same lesions in the same set on every run. Without
 # it each training run would be scored against a different test set, and

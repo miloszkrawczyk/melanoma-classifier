@@ -10,21 +10,67 @@ at startup and reuses it for every request.
 """
 
 import torch
+from torchvision import transforms
 
 from src.config import (
     BENIGN,
     CLASS_NAMES,
     CLASSES,
     CONFIDENCE_THRESHOLD,
+    IMAGE_SIZE,
     MALIGNANT,
     MALIGNANT_CLASSES,
     MALIGNANT_THRESHOLD,
     MODELS,
+    SKIN_MAX_ROUGHNESS,
+    SKIN_MIN_RED,
+    SKIN_MIN_ROUGHNESS,
+    SKIN_MIN_SATURATION,
+    SKIN_RED_TOLERANCE,
 )
-from src.data import build_transform
 from src.train import build_model, pick_device
 
 MALIGNANT_INDEXES = [CLASSES.index(dx) for dx in MALIGNANT_CLASSES]
+
+
+def roughness(tensor):
+    """Average brightness change between neighbouring pixels.
+
+    Noise jumps around from pixel to pixel and lands near 0.22. A flat colour
+    never changes and lands at 0.0. Photographs of skin sit between the two.
+    """
+    grey = tensor.mean(dim=0)
+    across = (grey[:, 1:] - grey[:, :-1]).abs().mean()
+    down = (grey[1:, :] - grey[:-1, :]).abs().mean()
+    return float((across + down) / 2)
+
+
+def looks_like_skin(tensor):
+    """A rough guard against photos that are not skin lesions at all.
+
+    Three cheap checks: the picture has to have the texture of a photograph,
+    it has to carry colour rather than being grey, and it has to be
+    red-dominant the way skin close-ups are.
+
+    This is a heuristic, not a classifier. It turns away noise, flat colours,
+    screenshots and diagrams. It will happily let through a photograph of a
+    beige wall, and it is not meant to be the last line of defence.
+    """
+    texture = SKIN_MIN_ROUGHNESS <= roughness(tensor) <= SKIN_MAX_ROUGHNESS
+
+    saturation = (tensor.max(dim=0).values - tensor.min(dim=0).values).mean()
+
+    red, green, blue = tensor.mean(dim=[1, 2])
+    red_dominant = (
+        red >= green - SKIN_RED_TOLERANCE and red >= blue - SKIN_RED_TOLERANCE
+    )
+
+    return (
+        texture
+        and saturation >= SKIN_MIN_SATURATION
+        and red_dominant
+        and red >= SKIN_MIN_RED
+    )
 
 
 class Predictor:
@@ -43,17 +89,24 @@ class Predictor:
         # the same picture would score differently every time.
         self.model.eval()
 
-        # No augmentation, and the same normalisation the model was trained
-        # with. Anything else quietly costs accuracy.
-        self.transform = build_transform(
-            augment=False, mean=settings["mean"], std=settings["std"]
+        # Two steps rather than one Compose, because looks_like_skin needs the
+        # picture before normalisation, while it still holds plain 0-1 pixels.
+        self.to_tensor = transforms.Compose(
+            [transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)), transforms.ToTensor()]
+        )
+        # The same normalisation the model was trained with. Anything else
+        # quietly costs accuracy.
+        self.normalise = transforms.Normalize(
+            mean=settings["mean"], std=settings["std"]
         )
 
     def predict(self, image):
         """Answer for one PIL image. Returns a dict ready to be sent as JSON."""
+        pixels = self.to_tensor(image.convert("RGB"))
+
         # unsqueeze(0) turns (3, 224, 224) into (1, 3, 224, 224). The network
         # always expects a batch, even when the batch holds a single photo.
-        batch = self.transform(image.convert("RGB")).unsqueeze(0).to(self.device)
+        batch = self.normalise(pixels).unsqueeze(0).to(self.device)
 
         with torch.no_grad():
             logits = self.model(batch)
@@ -72,6 +125,9 @@ class Predictor:
             # can be sure a lesion is malignant while unsure which of the three
             # malignant diagnoses it is.
             "confident": confidence >= CONFIDENCE_THRESHOLD,
+            # False means the picture does not look like a photo of skin
+            # at all, so nothing below it should be shown as an answer.
+            "looks_like_skin": looks_like_skin(pixels),
             "malignant_probability": malignant_probability,
             "category": (
                 MALIGNANT

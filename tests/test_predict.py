@@ -1,0 +1,61 @@
+"""Tests for the guard that turns away photos which are not skin lesions.
+
+These build their tensors by hand, so they need neither the dataset nor
+trained weights and will run anywhere.
+"""
+
+import torch
+
+from src.predict import looks_like_skin, roughness
+
+
+def skin_like_tensor():
+    """Something with roughly the colour and texture of a HAM10000 photo.
+
+    The blur matters: raw noise is far rougher than any photograph, so it has
+    to be smoothed until neighbouring pixels sit close together. These numbers
+    land at roughness 0.0100, inside the 0.0040 to 0.0494 range measured on
+    real images.
+    """
+    torch.manual_seed(0)
+    base = torch.tensor([0.76, 0.55, 0.57]).view(3, 1, 1)
+    texture = torch.randn(3, 224, 224) * 0.08
+    texture = torch.nn.functional.avg_pool2d(texture, 3, stride=1, padding=1)
+    return (base + texture).clamp(0, 1)
+
+
+def test_roughness_separates_noise_from_flat_colour():
+    torch.manual_seed(0)
+    noise = torch.rand(3, 224, 224)
+    flat = torch.full((3, 224, 224), 0.5)
+
+    assert roughness(noise) > 0.1
+    assert roughness(flat) == 0.0
+
+
+def test_skin_like_image_is_accepted():
+    assert looks_like_skin(skin_like_tensor())
+
+
+def test_noise_is_rejected():
+    torch.manual_seed(0)
+    assert not looks_like_skin(torch.rand(3, 224, 224))
+
+
+def test_flat_colour_is_rejected():
+    assert not looks_like_skin(torch.full((3, 224, 224), 0.5))
+
+
+def test_grey_image_is_rejected():
+    """Grey passes the red check, since every channel is equal. Saturation
+    is what catches it."""
+    grey = skin_like_tensor().mean(dim=0, keepdim=True).repeat(3, 1, 1)
+
+    assert not looks_like_skin(grey)
+
+
+def test_green_image_is_rejected():
+    green = torch.zeros(3, 224, 224)
+    green[1] = 0.6
+
+    assert not looks_like_skin(green)
