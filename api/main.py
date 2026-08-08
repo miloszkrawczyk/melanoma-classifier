@@ -16,7 +16,7 @@ import gradio as gr
 from fastapi import FastAPI, HTTPException, Response, UploadFile
 from PIL import Image, UnidentifiedImageError
 
-from frontend.ui import build_ui
+from frontend.ui import CSS, THEME, build_ui
 from src.predict import Predictor
 
 app = FastAPI(
@@ -97,4 +97,4 @@ async def explain(file: UploadFile):
 #   /predict   json
 #   /explain   png
 #   /docs      api documentation
-app = gr.mount_gradio_app(app, build_ui(predictor), path="/")
+app = gr.mount_gradio_app(app, build_ui(predictor), path="/", theme=THEME, css=CSS)
