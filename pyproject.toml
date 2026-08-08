@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.141.1",
+    "gradio>=6.22.0",
     "kaggle>=1.6.17",
     "pandas>=2.2.0",
     "pillow>=10.0.0",
@@ -19,6 +20,19 @@ dev = [
     "pytest>=8.0.0",
     "ruff>=0.6.0",
 ]
+
+# On Linux, torch defaults to the CUDA build: a dozen nvidia-* packages and
+# some 2.5 GB, for a graphics card neither the CI runner nor the container has.
+# Pointing Linux at the cpu index avoids the download; macOS is left alone,
+# where the normal wheel already targets Apple's own chip.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

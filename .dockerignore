@@ -1,0 +1,25 @@
+# Everything listed here is kept out of the build entirely, before Docker even
+# starts. Without it the whole project directory gets sent to the build daemon,
+# and data/ alone is 2.9 GB.
+
+data/
+.venv/
+.git/
+.idea/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# The service does not train, explore or plot.
+scripts/
+tests/
+results/
+
+# Readmes for the Space and the model repo, uploaded by their own scripts.
+space/
+model/
+
+# Only the ResNet is served. The from-scratch CNN stays a baseline for the
+# README and has no business in a production image.
+weights/cnn.pth

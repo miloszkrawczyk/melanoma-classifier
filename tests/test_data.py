@@ -6,7 +6,7 @@ accuracy just comes out too high. A test is the only thing that catches it.
 
 import pytest
 
-from src.config import CLASSES, IMAGE_SIZE
+from src.config import CLASSES, IMAGE_SIZE, METADATA_CSV
 from src.data import (
     SkinLesionDataset,
     build_dataloaders,
@@ -15,6 +15,15 @@ from src.data import (
     split_metadata,
     to_category,
     to_class_index,
+)
+
+# The dataset is 2.9 GB and gitignored, so on a fresh checkout, and on the
+# machine that runs the tests after a push, it simply is not there. Skipping
+# beats failing: these tests are about the split and the loading, and there is
+# nothing to split when there is no data.
+pytestmark = pytest.mark.skipif(
+    not METADATA_CSV.exists(),
+    reason="needs the HAM10000 dataset, see the README for how to fetch it",
 )
 
 
