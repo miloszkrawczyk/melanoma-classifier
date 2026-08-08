@@ -16,8 +16,9 @@ scripts/
 tests/
 results/
 
-# The Space's own README, uploaded separately by scripts/deploy_space.py.
+# Readmes for the Space and the model repo, uploaded by their own scripts.
 space/
+model/
 
 # Only the ResNet is served. The from-scratch CNN stays a baseline for the
 # README and has no business in a production image.
