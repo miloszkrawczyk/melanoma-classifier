@@ -336,6 +336,14 @@ html[lang="pl"] .langbar button[data-set="pl"] {
    while the script is still loading. */
 html:not([lang="pl"]) [data-lang="pl"] { display: none !important; }
 html[lang="pl"] [data-lang="en"] { display: none !important; }
+
+/* The Analyse button holds a bare text node between Svelte's markers, and
+   rewriting it from JavaScript breaks the re-render. Collapsing it to zero
+   and drawing the label with ::after leaves the DOM alone. */
+#analyse { font-size: 0 !important; }
+#analyse::after { font-size: 1.05rem; font-weight: 600; }
+html:not([lang="pl"]) #analyse::after { content: "Analyse"; }
+html[lang="pl"] #analyse::after { content: "Analizuj"; }
 """
 
 # Injected into <head> rather than passed as Gradio's js= parameter, which
@@ -492,7 +500,7 @@ PLACEHOLDER = f"""
         "Upload a close-up of a skin lesion, or pick one of the examples below "
         "the upload box, then press Analyse.",
         "Wgraj zbliżenie zmiany skórnej albo wybierz jeden z przykładów pod "
-        "polem wgrywania, a potem kliknij Analyse.",
+        "polem wgrywania, a potem kliknij Analizuj.",
     )}
   </p>
 </div>
@@ -663,7 +671,9 @@ def build_ui(predictor):
                     + "</p>"
                 )
                 photo = gr.Image(type="pil", show_label=False)
-                button = gr.Button("Analyse", variant="primary", size="lg")
+                button = gr.Button(
+            "Analyse", variant="primary", size="lg", elem_id="analyse"
+        )
                 gr.Examples(
                     examples=[
                         [str(path)] for path in sorted(EXAMPLES_DIR.glob("*.jpg"))
