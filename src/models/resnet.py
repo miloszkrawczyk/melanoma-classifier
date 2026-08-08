@@ -15,9 +15,17 @@ from torchvision.models import ResNet18_Weights, resnet18
 from src.config import CLASSES
 
 
-def build_resnet18():
-    """Fetch the pretrained network and give it a seven-class head."""
-    model = resnet18(weights=ResNet18_Weights.DEFAULT)
+def build_resnet18(pretrained=True):
+    """Build the network and give it a seven-class head.
+
+    pretrained=False skips the 45 MB download of ImageNet weights. That is what
+    serving wants: the very next thing it does is load our own fine-tuned
+    weights over the top, so fetching someone else's first is 45 MB and a
+    writable cache directory spent on numbers that get thrown away. It also
+    means the container starts without needing the network at all.
+    """
+    weights = ResNet18_Weights.DEFAULT if pretrained else None
+    model = resnet18(weights=weights)
 
     # model.fc is the final Linear(512, 1000). Everything in front of it stays
     # exactly as trained; only the answer sheet at the end changes.
