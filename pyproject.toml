@@ -38,6 +38,10 @@ torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 pythonpath = ["."]
 
 [tool.ruff.lint]
-# "import torch.nn as nn" is what PyTorch's own docs and every tutorial use.
-# Ruff would rather have "from torch import nn"; the convention wins.
-ignore = ["PLR0402"]
+# PLR0402: "import torch.nn as nn" is what PyTorch's own docs and every
+#   tutorial use. Ruff would rather have "from torch import nn"; the
+#   convention wins.
+# B008: Gradio passes the progress reporter as a default argument, as in
+#   "def f(x, progress=gr.Progress())". That is the documented way to ask for
+#   one, and there is no other.
+ignore = ["PLR0402", "B008"]
