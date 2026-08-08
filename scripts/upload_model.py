@@ -37,7 +37,7 @@ if __name__ == "__main__":
     api.create_repo(repo_id=repo_id, repo_type="model", private=True, exist_ok=True)
 
     api.upload_file(
-        path_or_fileobj=PROJECT_ROOT / "model" / "README.md",
+        path_or_fileobj=PROJECT_ROOT / "deploy" / "model" / "README.md",
         path_in_repo="README.md",
         repo_id=repo_id,
     )
