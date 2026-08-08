@@ -92,7 +92,9 @@ class Predictor:
         settings = MODELS["resnet"]
 
         self.device = pick_device()
-        self.model = build_resnet18().to(self.device)
+        # pretrained=False: the fine-tuned weights land on top of this a
+        # line later, so downloading ImageNet's first would be wasted.
+        self.model = build_resnet18(pretrained=False).to(self.device)
         self.model.load_state_dict(
             torch.load(settings["weights"], map_location=self.device)
         )

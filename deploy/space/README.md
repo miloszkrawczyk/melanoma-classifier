@@ -45,7 +45,8 @@ The page is one way in. There is also a JSON API:
 
 ## Source
 
-[github.com/miloszkrawczyk/melanoma-classifier](https://github.com/miloszkrawczyk/melanoma-classifier)
+- [Source on GitHub](https://github.com/miloszkrawczyk/melanoma-classifier)
+- [Weights on the Hub](https://huggingface.co/miloszkrawczyk/skin-lesion-classifier)
 
 ## Citation
 

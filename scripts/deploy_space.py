@@ -55,9 +55,10 @@ if __name__ == "__main__":
     print(f"space ready: https://huggingface.co/spaces/{repo_id}")
 
     # The Space reads its settings from the frontmatter at the top of its own
-    # README, so that file has to be the one in space/, not the project README.
+    # README, so that file has to be the one in deploy/space/, not the project
+    # README at the root.
     api.upload_file(
-        path_or_fileobj=PROJECT_ROOT / "space" / "README.md",
+        path_or_fileobj=PROJECT_ROOT / "deploy" / "space" / "README.md",
         path_in_repo="README.md",
         repo_id=repo_id,
         repo_type="space",

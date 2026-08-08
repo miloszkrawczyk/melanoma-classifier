@@ -98,9 +98,14 @@ Input is 224x224 RGB normalised with the ImageNet statistics
 `mean=(0.485, 0.456, 0.406)`, `std=(0.229, 0.224, 0.225)`, because that is
 what the pretrained layers were fed.
 
-The full application, with the API, the container and the attention maps,
-is at
-[github.com/miloszkrawczyk/melanoma-classifier](https://github.com/miloszkrawczyk/melanoma-classifier).
+## The application
+
+This repository holds the weights. The running application, with the web
+interface, the JSON API and the attention maps, is at:
+
+- **[Live demo](https://skin-lesion-classifier.blackmoss-34728f66.germanywestcentral.azurecontainerapps.io)** — scaled to zero, so the first request after a quiet
+  spell takes about a minute while the container wakes
+- [Source on GitHub](https://github.com/miloszkrawczyk/melanoma-classifier)
 
 ## Training
 
