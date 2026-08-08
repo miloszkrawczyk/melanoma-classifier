@@ -186,6 +186,9 @@ docker build -t skin-lesion-classifier .
 docker run -p 7860:7860 skin-lesion-classifier
 ```
 
+`deploy/azure.md` has the commands behind the live demo, including the two
+things that went wrong getting there.
+
 | path | |
 |---|---|
 | `/` | the web interface |
