@@ -14,6 +14,14 @@ FROM python:3.12-slim
 # uv, taken from its own published image rather than installed with a script.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# Hugging Face Spaces runs containers as user 1000, not root. Files copied in
+# as root would be unwritable, and Gradio needs somewhere to put the uploads it
+# is handed. Creating the user here means the image behaves the same locally
+# and deployed, rather than working on my laptop and falling over on theirs.
+RUN useradd --create-home --uid 1000 user
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH
+
 WORKDIR /app
 
 # The single most important line in this file. On Linux, plain "pip install
@@ -52,6 +60,11 @@ COPY frontend/ frontend/
 # rebuild them with "uv run python -m src.train resnet", or take the deployed
 # copy, where the weights live alongside the code in the Space's own repo.
 COPY weights/resnet.pth weights/resnet.pth
+
+# Ownership handed over after the copying, since the user cannot write into
+# /app otherwise. Everything below this line runs unprivileged.
+RUN chown -R user:user /app
+USER user
 
 # 7860 is what Hugging Face Spaces expects. Any port works elsewhere.
 EXPOSE 7860
