@@ -1,0 +1,44 @@
+# Runs the tests and the linter on a fresh machine every time anything is
+# pushed. The point is not that the tests pass on my laptop, where half the
+# things they need are installed and forgotten about, but that they pass on a
+# machine that has only what pyproject.toml asks for.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          # Keeps the downloaded packages between runs. Without it every push
+          # would fetch torch again.
+          enable-cache: true
+
+      # The ResNet tests build a pretrained network, which downloads 45 MB of
+      # ImageNet weights from pytorch.org. Cached here so that happens once
+      # rather than on every push.
+      - name: Cache pretrained weights
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/torch
+          key: torch-hub-${{ runner.os }}
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Lint
+        run: uv run ruff check .
+
+      # The dataset is gitignored, so the tests that need it skip themselves.
+      # -rs lists what was skipped and why, which stops a quietly skipped suite
+      # from looking like a passing one.
+      - name: Test
+        run: uv run pytest -q -rs
