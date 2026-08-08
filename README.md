@@ -4,6 +4,12 @@
 [![model](https://img.shields.io/badge/model-Hugging%20Face-yellow)](https://huggingface.co/miloszkrawczyk/skin-lesion-classifier)
 [![licence](https://img.shields.io/badge/licence-CC%20BY--NC%204.0-lightgrey)](https://creativecommons.org/licenses/by-nc/4.0/)
 
+### [→ Try it live](https://skin-lesion-classifier.blackmoss-34728f66.germanywestcentral.azurecontainerapps.io)
+
+Hosted on Azure Container Apps, scaled to zero. The first request after a
+quiet spell takes about a minute while the container wakes up and loads the
+weights; after that it answers in well under a second.
+
 A skin lesion classifier trained on HAM10000, wrapped in an API, containerised
 and given a web interface. Upload a photo, get one of seven diagnoses, a
 malignant/benign call, and a heatmap of what the model actually looked at.
