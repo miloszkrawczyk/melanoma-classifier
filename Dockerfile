@@ -35,6 +35,7 @@ RUN uv pip install --system --no-cache \
 RUN uv pip install --system --no-cache \
     fastapi==0.141.1 \
     "uvicorn[standard]==0.52.1" \
+    gradio==6.22.0 \
     pillow==12.3.0 \
     numpy==2.5.1 \
     python-multipart==0.0.32
@@ -44,6 +45,12 @@ RUN uv pip install --system --no-cache \
 # edit to a Python file would make each rebuild a several-minute wait.
 COPY src/ src/
 COPY api/ api/
+COPY frontend/ frontend/
+
+# Not in the GitHub repo: 43 MB of weights are gitignored, so a plain clone
+# followed by "docker build" stops here saying the file is missing. Either
+# rebuild them with "uv run python -m src.train resnet", or take the deployed
+# copy, where the weights live alongside the code in the Space's own repo.
 COPY weights/resnet.pth weights/resnet.pth
 
 # 7860 is what Hugging Face Spaces expects. Any port works elsewhere.
