@@ -12,9 +12,11 @@ just as easily.
 
 from io import BytesIO
 
+import gradio as gr
 from fastapi import FastAPI, HTTPException, Response, UploadFile
 from PIL import Image, UnidentifiedImageError
 
+from frontend.ui import build_ui
 from src.predict import Predictor
 
 app = FastAPI(
@@ -86,3 +88,13 @@ async def explain(file: UploadFile):
     picture.save(buffer, format="PNG")
 
     return Response(buffer.getvalue(), media_type="image/png")
+
+
+# The interface and the JSON API in one process, sharing one model. Mounted
+# last, because it takes over the root path and everything above keeps its own.
+#
+#   /          the page
+#   /predict   json
+#   /explain   png
+#   /docs      api documentation
+app = gr.mount_gradio_app(app, build_ui(predictor), path="/")
