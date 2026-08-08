@@ -1,0 +1,86 @@
+ResNet18 on the held-out test set
+=================================
+
+Run once, on the finished model, and this is the only time the test set has
+been touched. Every choice made along the way, augmentation, epoch count,
+architecture, the 0.15 malignant threshold and the 0.60 confidence threshold,
+was made by looking at validation. That makes validation no longer impartial:
+not because the model saw it, but because I did, a dozen times over.
+
+Model
+-----
+ResNet18 pretrained on ImageNet, fine-tuned for 15 epochs, best epoch 7.
+weights/resnet.pth. Same normalisation and no augmentation at inference.
+
+Top-class rule
+--------------
+1508 images.
+
+         akiec    bcc    bkl     df    mel     nv   vasc
+akiec       32      7      7      2      7      4      1
+bcc         10     57      0      2      4      6      0
+bkl         15      5     89      1     53     32      0
+df           0      1      0      9      2      0      0
+mel          7      1      6      5    116     37      3
+nv           5     19     18     18     91    806     10
+vasc         0      0      0      0      0      0     20
+
+class    support   recall  precision
+akiec         60   53.3%      46.4%
+bcc           79   72.2%      63.3%
+bkl          195   45.6%      74.2%
+df            12   75.0%      24.3%
+mel          175   66.3%      42.5%
+nv           967   83.4%      91.1%
+vasc          20  100.0%      58.8%
+
+accuracy 74.9%, against 67.2% for a model that answers nv every time
+
+malignant lesions found   241
+malignant lesions missed   73
+false alarms              191
+recall on malignant       76.8%
+precision on malignant    55.8%
+
+Threshold rule, which is what the app uses
+------------------------------------------
+Adding the three malignant probabilities up and comparing against a threshold.
+314 of the 1508 test images are malignant.
+
+    threshold   recall  precision   missed  false alarms
+         0.10   94.3%      39.3%       18           458
+         0.15   92.0%      43.0%       25           383   <- the app's setting
+         0.20   89.8%      44.3%       32           355
+         0.30   85.7%      48.0%       45           291
+         0.50   76.4%      57.3%       74           179
+
+Validation against test
+-----------------------
+                          validation    test
+recall on malignant            93.9%   92.0%
+precision on malignant         41.1%   43.0%
+malignant missed                  18      25
+accuracy, top-class rule       78.2%   74.9%
+
+What the numbers say
+--------------------
+The drop is small: 1.9 points of recall and 3.3 of accuracy. That is the
+result worth having. A dozen decisions were tuned against validation, and if
+the test set had come back far worse it would mean those decisions had been
+fitted to one particular sample rather than to the problem.
+
+The 0.15 threshold, chosen entirely on validation, holds up: 92.0% recall
+against the 93.9% it promised. 25 of 314 malignant lesions go unnoticed, and
+383 of 1194 benign ones raise a false alarm.
+
+Melanoma recall is 66.3% under the top-class rule, and 37 melanomas were
+called ordinary moles. Under the threshold rule most of those are still
+flagged, because the model spreads its uncertainty across the malignant
+classes rather than landing on nv outright. That gap between 66.3% and 92.0%
+is the whole argument for not taking the top class.
+
+df is 12 images. Its 75% recall means nine of twelve. Nothing about that
+number is stable and it should not be quoted without saying so.
+
+This file is the last measurement. Anything tuned after this would need a
+fresh test set to be honest about.
