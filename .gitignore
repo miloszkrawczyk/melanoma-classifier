@@ -37,3 +37,8 @@ kaggle.json
 
 # macOS
 .DS_Store
+
+# My working notes while going through this project's open problems: the list
+# of steps I am working from and a log of what each one changed. Mine rather
+# than the project's, and in Polish, so they have no place in a public repo.
+notes/
