@@ -84,3 +84,21 @@ number is stable and it should not be quoted without saying so.
 
 This file is the last measurement. Anything tuned after this would need a
 fresh test set to be honest about.
+
+Correction (2026-11-01)
+-----------------------
+The top-class rule section above reports "accuracy 74.9%, against 67.2% for a
+model that answers nv every time". The second number is wrong.
+
+67.2% was hard-coded into evaluate.py and printed for every split. It is right
+for validation, where 1022 of 1521 images are nv, and wrong here: the test set
+holds 967 nv out of 1508, so a model answering nv every time scores 64.1%.
+
+The error understated the model rather than flattering it. Against the correct
+baseline, 74.9% accuracy is 10.8 points of margin, not the 7.7 this file
+implied.
+
+Nothing measured on the model changes. Every other figure here stands, and so
+does the 67.2% in results/01 through results/04, which are all validation runs.
+The baseline is now computed from the labels of whichever split is being
+scored, so it cannot drift away from the data again.

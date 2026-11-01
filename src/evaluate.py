@@ -73,6 +73,20 @@ def confusion_matrix(predicted, actual):
     return matrix
 
 
+def majority_class_baseline(actual):
+    """What a model answering the single commonest class every time would score.
+
+    Accuracy means nothing here without this number to sit next to, because two
+    thirds of HAM10000 are ordinary moles. It differs per split: 67.2% on
+    validation against 64.1% on the test set. Hard-coding it printed the
+    validation figure for every split, including the one that went to the README.
+    """
+    counts = torch.bincount(actual, minlength=len(CLASSES))
+    commonest = int(counts.argmax())
+
+    return CLASSES[commonest], int(counts[commonest]) / len(actual)
+
+
 def print_confusion_matrix(matrix):
     print("rows: real diagnosis, columns: what the model guessed")
     print(f"{'':7}" + "".join(f"{name:>7}" for name in CLASSES))
@@ -126,7 +140,11 @@ def print_report(predicted, actual, name, split):
     print_per_class(matrix)
     print()
     accuracy = int((predicted == actual).sum()) / len(actual)
-    print(f"accuracy: {accuracy:.1%}  (a model always answering nv would get 67.2%)")
+    commonest, baseline = majority_class_baseline(actual)
+    print(
+        f"accuracy: {accuracy:.1%}  "
+        f"(a model always answering {commonest} would get {baseline:.1%})"
+    )
     print()
     print_binary(predicted, actual)
 

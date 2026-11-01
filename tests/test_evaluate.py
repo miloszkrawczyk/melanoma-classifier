@@ -11,7 +11,14 @@ import pytest
 import torch
 
 import src.evaluate as evaluate
-from src.evaluate import confusion_matrix, parse_arguments, print_report
+from src.config import CLASSES, METADATA_CSV
+from src.data import load_metadata, split_metadata
+from src.evaluate import (
+    confusion_matrix,
+    majority_class_baseline,
+    parse_arguments,
+    print_report,
+)
 
 
 def test_importing_the_module_runs_nothing():
@@ -69,3 +76,34 @@ def test_an_unknown_model_is_rejected():
     """A bare KeyError out of the config dict is not a usable error message."""
     with pytest.raises(SystemExit, match='expected "cnn" or "resnet"'):
         parse_arguments(["src.evaluate", "rsnet"])
+
+
+def test_majority_class_baseline_names_the_commonest_class():
+    # Four moles and one melanoma: answering nv every time scores 80%.
+    actual = torch.tensor([CLASSES.index("nv")] * 4 + [CLASSES.index("mel")])
+
+    assert majority_class_baseline(actual) == ("nv", 0.8)
+
+
+# Skipped per test rather than through a module-level pytestmark, because every
+# other test in this file runs without the dataset and should keep doing so.
+@pytest.mark.skipif(
+    not METADATA_CSV.exists(),
+    reason="needs the HAM10000 metadata, see the README for how to fetch it",
+)
+def test_majority_class_baseline_matches_the_documented_numbers():
+    """Guards the two baselines quoted in results/ and in the README.
+
+    Reads the label column and nothing else: no model, no images, no
+    predictions. The share of a class within a split is a property of the
+    split, so this does not count as touching the test set.
+    """
+    _, val, test = split_metadata(load_metadata())
+
+    val_name, val_share = majority_class_baseline(torch.tensor(val["label"].to_numpy()))
+    test_name, test_share = majority_class_baseline(
+        torch.tensor(test["label"].to_numpy())
+    )
+
+    assert (val_name, f"{val_share:.1%}") == ("nv", "67.2%")
+    assert (test_name, f"{test_share:.1%}") == ("nv", "64.1%")

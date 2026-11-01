@@ -107,8 +107,8 @@ appointment, a miss costs considerably more.
 | `vasc` | vascular lesion | 20 | 100.0% | 58.8% |
 
 Accuracy is 74.9%. That number is close to meaningless here and I am including
-it mainly to say so: two thirds of the data are ordinary moles, so a model
-answering `nv` to everything scores 67.2% while knowing nothing.
+it mainly to say so: nearly two thirds of the test set are ordinary moles, so a
+model answering `nv` to everything scores 64.1% while knowing nothing.
 
 ### How it got there
 
