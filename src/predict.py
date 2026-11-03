@@ -31,6 +31,7 @@ from src.config import (
 from src.device import pick_device
 from src.gradcam import heatmap, last_conv_layer, overlay
 from src.models.resnet import build_resnet18
+from src.weights import load_weights
 
 MALIGNANT_INDEXES = [CLASSES.index(dx) for dx in MALIGNANT_CLASSES]
 
@@ -95,14 +96,11 @@ class Predictor:
         # pretrained=False: the fine-tuned weights land on top of this a
         # line later, so downloading ImageNet's first would be wasted.
         self.model = build_resnet18(pretrained=False).to(self.device)
-        # weights_only=True because a .pth is a pickle and unpickling runs
-        # whatever the file says to run. That is not hypothetical here: the
-        # README tells people to download resnet.pth from the Hugging Face Hub,
-        # so this reads a file that came off the internet. The keyword makes
-        # torch accept tensors and refuse everything else.
-        self.model.load_state_dict(
-            torch.load(settings["weights"], map_location=self.device, weights_only=True)
-        )
+        # safetensors if one is there, the pickle otherwise, and never
+        # unpickling anything but tensors. The README tells people to download
+        # these weights from the Hugging Face Hub, so this reads a file that
+        # came off the internet.
+        self.model.load_state_dict(load_weights(settings["weights"]))
         # Without eval() the BatchNorm layers would read statistics off the
         # current batch. A batch of one photo would then depend on itself, and
         # the same picture would score differently every time.

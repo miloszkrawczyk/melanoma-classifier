@@ -24,7 +24,12 @@ gap is worth knowing about rather than worth code.
 
 import ast
 
+import torch
+
 from src.config import PROJECT_ROOT
+from src.device import pick_device
+from src.models.resnet import build_resnet18
+from src.weights import load_weights, safetensors_beside, save_weights
 
 
 def python_files():
@@ -81,3 +86,69 @@ def test_every_weight_load_refuses_to_unpickle():
         "these torch.load calls would run whatever is in the file: "
         + ", ".join(offenders)
     )
+
+
+def a_state_dict():
+    """Two tensors of the dtypes a real state dict holds.
+
+    float32 for the weights, int64 for BatchNorm's num_batches_tracked, which
+    is the pair that both weight files in this project actually contain.
+    """
+    torch.manual_seed(0)
+
+    return {
+        "layer.weight": torch.rand(4, 3, 3, 3),
+        "layer.num_batches_tracked": torch.tensor(7),
+    }
+
+
+def test_a_saved_state_dict_comes_back_unchanged(tmp_path):
+    """Bit for bit, not close enough. Weights that shift are weights that lie."""
+    original = a_state_dict()
+
+    save_weights(original, tmp_path / "model.pth")
+    restored = load_weights(tmp_path / "model.pth")
+
+    assert restored.keys() == original.keys()
+    for name, tensor in original.items():
+        assert torch.equal(restored[name], tensor)
+        assert restored[name].dtype == tensor.dtype
+
+
+def test_saving_writes_the_safetensors_sibling(tmp_path):
+    """The callers pass the .pth path the config names and get the new format."""
+    save_weights(a_state_dict(), tmp_path / "model.pth")
+
+    assert (tmp_path / "model.safetensors").exists()
+    assert not (tmp_path / "model.pth").exists()
+
+
+def test_safetensors_wins_when_both_formats_are_there(tmp_path):
+    """A converted checkout has both, and the new one has to be the one read."""
+    torch.save({"which": torch.tensor([1.0])}, tmp_path / "model.pth")
+    save_weights({"which": torch.tensor([2.0])}, tmp_path / "model.pth")
+
+    assert load_weights(tmp_path / "model.pth")["which"].item() == 2.0
+
+
+def test_the_pickle_is_still_read_when_there_is_no_safetensors(tmp_path):
+    """The reason the fallback exists: an August checkout has only the .pth."""
+    torch.save({"which": torch.tensor([1.0])}, tmp_path / "model.pth")
+
+    assert not safetensors_beside(tmp_path / "model.pth").exists()
+    assert load_weights(tmp_path / "model.pth")["which"].item() == 1.0
+
+
+def test_a_loaded_state_dict_goes_into_a_model_on_the_device(tmp_path):
+    """Why load_weights takes no device.
+
+    The file is read onto the CPU and load_state_dict copies into parameters
+    that already live wherever the model was put, so the parameters stay there.
+    """
+    device = pick_device()
+    model = build_resnet18(pretrained=False).to(device)
+
+    save_weights(model.state_dict(), tmp_path / "model.pth")
+    model.load_state_dict(load_weights(tmp_path / "model.pth"))
+
+    assert next(model.parameters()).device.type == device.type

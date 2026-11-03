@@ -13,8 +13,10 @@ venv/
 # Too big for git and anyone can re-download it with scripts/download_data.py
 data/
 
-# Trained weights. Reproducible by running the training, so nothing to version here.
+# Trained weights, in either format. Reproducible by running the training,
+# so nothing to version here.
 *.pth
+*.safetensors
 
 # Kaggle API token. Never commit this, it is a private key to my account.
 kaggle.json

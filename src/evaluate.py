@@ -31,6 +31,7 @@ from src.config import (
 from src.data import build_dataloaders
 from src.device import pick_device
 from src.train import build_model
+from src.weights import load_weights
 
 MALIGNANT_INDEXES = [CLASSES.index(dx) for dx in MALIGNANT_CLASSES]
 
@@ -297,11 +298,7 @@ if __name__ == "__main__":
     loader = test_loader if split == "test" else val_loader
 
     model = build_model(name).to(device)
-    # weights_only=True: a .pth is a pickle, so without it loading the file
-    # runs whatever the file says to run.
-    model.load_state_dict(
-        torch.load(settings["weights"], map_location=device, weights_only=True)
-    )
+    model.load_state_dict(load_weights(settings["weights"]))
 
     probabilities, actual = collect_probabilities(model, loader, device)
     print_report(probabilities, actual, name, split)
