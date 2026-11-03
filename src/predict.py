@@ -95,8 +95,13 @@ class Predictor:
         # pretrained=False: the fine-tuned weights land on top of this a
         # line later, so downloading ImageNet's first would be wasted.
         self.model = build_resnet18(pretrained=False).to(self.device)
+        # weights_only=True because a .pth is a pickle and unpickling runs
+        # whatever the file says to run. That is not hypothetical here: the
+        # README tells people to download resnet.pth from the Hugging Face Hub,
+        # so this reads a file that came off the internet. The keyword makes
+        # torch accept tensors and refuse everything else.
         self.model.load_state_dict(
-            torch.load(settings["weights"], map_location=self.device)
+            torch.load(settings["weights"], map_location=self.device, weights_only=True)
         )
         # Without eval() the BatchNorm layers would read statistics off the
         # current batch. A batch of one photo would then depend on itself, and

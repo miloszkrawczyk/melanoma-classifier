@@ -297,7 +297,11 @@ if __name__ == "__main__":
     loader = test_loader if split == "test" else val_loader
 
     model = build_model(name).to(device)
-    model.load_state_dict(torch.load(settings["weights"], map_location=device))
+    # weights_only=True: a .pth is a pickle, so without it loading the file
+    # runs whatever the file says to run.
+    model.load_state_dict(
+        torch.load(settings["weights"], map_location=device, weights_only=True)
+    )
 
     probabilities, actual = collect_probabilities(model, loader, device)
     print_report(probabilities, actual, name, split)

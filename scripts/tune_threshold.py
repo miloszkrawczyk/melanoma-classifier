@@ -77,7 +77,11 @@ if __name__ == "__main__":
     _, val_loader, _ = build_dataloaders(mean=settings["mean"], std=settings["std"])
 
     model = model.to(device)
-    model.load_state_dict(torch.load(settings["weights"], map_location=device))
+    # weights_only=True: a .pth is a pickle, so without it loading the file
+    # runs whatever the file says to run.
+    model.load_state_dict(
+        torch.load(settings["weights"], map_location=device, weights_only=True)
+    )
 
     probabilities, actual = collect_probabilities(model, val_loader, device)
     malignant_scores = malignant_probability(probabilities)
