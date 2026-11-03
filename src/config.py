@@ -113,6 +113,18 @@ MAX_UPLOAD_BYTES: int = 8 * 1024 * 1024
 # PIL.Image.MAX_IMAGE_PIXELS, which is a different number for a different job.
 MAX_UPLOAD_PIXELS: int = 50_000_000
 
+# How often one caller may ask. Measured against a running server: a single
+# client pushes 81 requests a second through /predict on one thread and 295 on
+# eight, which is 17715 a minute. A person looking at the demo, examples and
+# own photos included, manages maybe 15 a minute.
+#
+# So 60 a minute leaves a person four times the room they need while capping a
+# script at a third of a percent of what the machine can do. The limit is not
+# here to protect the CPU from a human; it is here so one script cannot take
+# the service away from everybody else.
+RATE_LIMIT_REQUESTS: int = 60
+RATE_LIMIT_WINDOW_SECONDS: int = 60
+
 
 # *** Turning away photos that are not skin lesions ***
 # A classifier can only ever answer with one of the classes it was taught. Ask

@@ -10,13 +10,17 @@ nothing about HTTP, so it can be called from a test, a script or a notebook
 just as easily.
 """
 
+import threading
+import time
+from collections import deque
 from io import BytesIO
 
 import gradio as gr
-from fastapi import FastAPI, HTTPException, Response, UploadFile
+from fastapi import FastAPI, HTTPException, Request, Response, UploadFile
 
 from frontend.ui import CSS, HEAD, THEME, build_ui
 from src.predict import Predictor
+from src.ratelimit import TooManyRequests, note_request
 from src.uploads import NotAnImage, TooLarge, open_upload
 
 app = FastAPI(
@@ -31,6 +35,38 @@ app = FastAPI(
 # 43 MB of weights takes a second or two, which would be a second or two added
 # to every single request if it happened inside the handler.
 predictor = Predictor()
+
+
+# Who has asked for what lately, and the lock that keeps the two handlers from
+# treading on it. The lock is not decoration: the handlers below run in
+# starlette's worker threads, so this is the one thing they share.
+#
+# Three things this cannot do, worth knowing before trusting it.
+# Behind a proxy, request.client is the proxy, so every caller lands in the
+# same bucket. Reading X-Forwarded-For would fix that only by trusting a header
+# the caller writes, which trades one hole for another. The count lives in this
+# process, so uvicorn --workers N gives N independent counters and N times the
+# limit, and a restart forgets everything. And the Gradio page calls the
+# Predictor directly rather than over HTTP, so none of this applies to it: this
+# guards the JSON API, not the demo.
+recent_requests = deque()
+recent_requests_lock = threading.Lock()
+
+
+def check_rate_limit(request):
+    """Let this request through, or refuse it as too frequent."""
+    # request.client is None for an ASGI transport that does not report one,
+    # which happens in tests. Lumping those together is right: they are all
+    # the same unknown caller.
+    client = request.client.host if request.client else "unknown"
+
+    with recent_requests_lock:
+        try:
+            # monotonic, not time(), so the limit cannot be slipped by the
+            # clock being put back or a daylight saving change.
+            note_request(recent_requests, client, time.monotonic())
+        except TooManyRequests as refusal:
+            raise HTTPException(status_code=429, detail=str(refusal))
 
 
 def read_image(file):
@@ -75,7 +111,7 @@ def health():
 # out; letting them overlap without fixing it would have traded a slow service
 # for one that answers with another request's heatmap.
 @app.post("/predict")
-def predict(file: UploadFile):
+def predict(request: Request, file: UploadFile):
     """Take one photo of a skin lesion and answer three questions about it.
 
     Whether the picture is a skin lesion at all, which diagnosis it looks like,
@@ -83,6 +119,8 @@ def predict(file: UploadFile):
     the model can be sure a lesion is malignant while having no idea which of
     the three malignant diagnoses it is looking at.
     """
+    check_rate_limit(request)
+
     return predictor.predict(read_image(file))
 
 
@@ -91,7 +129,7 @@ def predict(file: UploadFile):
     responses={200: {"content": {"image/png": {}}}},
     response_class=Response,
 )
-def explain(file: UploadFile):
+def explain(request: Request, file: UploadFile):
     """Return the photo with a heatmap of what the answer rested on.
 
     An image rather than JSON, because the point is to be looked at. If the
@@ -99,6 +137,8 @@ def explain(file: UploadFile):
     on a ruler or a hair in the corner, the answer is worth nothing however
     confident it sounded.
     """
+    check_rate_limit(request)
+
     picture = predictor.explain(read_image(file))
 
     # PNG rather than JPEG. The heatmap has large flat areas of one colour,
