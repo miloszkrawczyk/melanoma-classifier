@@ -14,10 +14,10 @@ from io import BytesIO
 
 import gradio as gr
 from fastapi import FastAPI, HTTPException, Response, UploadFile
-from PIL import Image, UnidentifiedImageError
 
 from frontend.ui import CSS, HEAD, THEME, build_ui
 from src.predict import Predictor
+from src.uploads import NotAnImage, TooLarge, open_upload
 
 app = FastAPI(
     title="Melanoma classifier",
@@ -34,13 +34,21 @@ predictor = Predictor()
 
 
 def read_image(file):
-    """Open an upload as a picture, or say plainly that it was not one."""
+    """Turn an upload into a picture, or into the right refusal.
+
+    The deciding happens in src.uploads, which knows nothing about HTTP. All
+    this adds is the status code each refusal deserves.
+    """
     try:
-        return Image.open(file.file)
-    except UnidentifiedImageError:
+        return open_upload(file.file)
+    except NotAnImage as refusal:
         # 400 means "your request was wrong", as against 500 which would mean
         # "our code broke". Sending a text file here is the caller's mistake.
-        raise HTTPException(status_code=400, detail="that file is not an image")
+        raise HTTPException(status_code=400, detail=str(refusal))
+    except TooLarge as refusal:
+        # 413 rather than 400, because the request was the right shape and the
+        # only thing wrong with it was its size.
+        raise HTTPException(status_code=413, detail=str(refusal))
 
 
 @app.get("/health")

@@ -89,6 +89,31 @@ INTERVAL_Z: float = 1.96
 BOOTSTRAP_RESAMPLES: int = 10000
 
 
+# *** Limits on what the service accepts ***
+# Measured over the dataset: HAM10000 photos run 83 KB to 479 KB, averaging
+# 270 KB, and the examples shipped with the interface sit between 231 and
+# 333 KB. A photo straight off a current phone reaches a few megabytes. 8 MB
+# clears all of that and turns away anything that is not a photograph.
+#
+# This is not a guard against the bytes arriving. Starlette has already
+# buffered the whole body before a handler runs, spooling to a temporary file
+# past 1 MB, and caps nothing. It is a guard against handing them to the model.
+# A real byte cap belongs in the reverse proxy in front of the app.
+MAX_UPLOAD_BYTES: int = 8 * 1024 * 1024
+
+# The byte limit above does not catch a decompression bomb: a PNG of a few tens
+# of kilobytes can declare 10000x10000, which is 400 MB once decoded. PIL waves
+# that through, since its own MAX_IMAGE_PIXELS is 89.5 Mpx and it only raises
+# above twice that. Neither limit contains the other, because an 8 MB JPEG can
+# easily be 50 Mpx.
+#
+# 50 Mpx is what the best phone cameras produce today, so anything lower would
+# start refusing real photographs. Decoded it is around 150 MB, which the
+# service survives. Named UPLOAD rather than IMAGE to stay clearly apart from
+# PIL.Image.MAX_IMAGE_PIXELS, which is a different number for a different job.
+MAX_UPLOAD_PIXELS: int = 50_000_000
+
+
 # *** Turning away photos that are not skin lesions ***
 # A classifier can only ever answer with one of the classes it was taught. Ask
 # it about a checkerboard and it names a diagnosis, confidently. Measured on
