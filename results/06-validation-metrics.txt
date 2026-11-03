@@ -1,0 +1,119 @@
+Threshold-free metrics on validation
+====================================
+
+Every metric this project has quoted so far sits at one operating point: the
+0.15 malignant threshold, or the top class. None of them answer "how good is
+the ranking itself", which is the question that survives changing the
+threshold. These two do.
+
+Validation, 1521 images, 293 of them malignant (19.3%). The test set is not
+touched here and still stands at the single measurement in results/05.
+
+Validation is not impartial and these numbers inherit that. Not through the
+threshold, which is what makes them worth having, but through the weights:
+both models were saved at their best validation loss, so validation picked the
+epoch. Read them as an upper bound, not a forecast.
+
+Model
+-----
+Both models exactly as they stand in weights/, no retraining. ResNet18
+fine-tuned for 15 epochs, best epoch 7, weights/resnet.pth. The from-scratch
+CNN at 40 epochs, weights/cnn.pth. Same normalisation each was trained with,
+no augmentation at inference.
+
+    uv run python -m src.evaluate resnet
+    uv run python -m src.evaluate cnn
+
+Threshold-free metrics for the malignant call
+---------------------------------------------
+The score being ranked is the sum of the three malignant probabilities, which
+is the same number predict.py compares against MALIGNANT_THRESHOLD. So this
+measures the decision the app makes, not a neighbouring one.
+
+                        ResNet18       CNN     gap
+    ROC-AUC                0.910     0.868   0.042
+    PR-AUC                 0.721     0.544   0.177
+
+For context, at the operating points already recorded:
+
+                        ResNet18       CNN
+    accuracy               78.2%     62.2%
+    recall, top class      77.5%     77.8%
+    precision, top class   58.8%     44.7%
+    malignant missed          66        65
+
+A model answering nv every time scores 67.2% accuracy on this split. A model
+ranking at random scores PR-AUC 0.193, the share of malignant images, and
+ROC-AUC 0.500.
+
+What the numbers say
+--------------------
+ResNet18 ranks lesions well. PR-AUC 0.721 against a 0.193 floor means the
+malignant score carries real information, and it is the first number in this
+project that says so without resting on a threshold I chose by hand.
+
+The interesting part is the two gaps. On ROC-AUC the two models look almost
+alike, 0.910 against 0.868, a difference of 0.042. On PR-AUC the gap is 0.177,
+four times wider. The same two models, the same predictions, two measures that
+disagree about how different they are.
+
+ROC-AUC is the one that misleads here. It counts true negatives, and with four
+benign lesions for every malignant one, correctly ignoring moles is most of
+what either model does. Both are good at it, so both score well and the
+difference between them gets diluted. PR-AUC never looks at a true negative.
+It asks only how cleanly the 293 malignant lesions were pulled to the top, and
+on that the CNN is much worse. 0.177 is the honest size of the gap.
+
+This also settles something the top-class numbers made confusing. The CNN's
+recall, 77.8%, is slightly better than ResNet's 77.5%, and it misses one fewer
+malignant lesion, 65 against 66. Read on its own, that looks like a tie. It is
+not: the CNN raises 282 false alarms to ResNet's 159 to get there, and PR-AUC
+prices that in. Two models can miss the same number of cancers and still be
+far apart, and this is the measure that shows it.
+
+Nothing here changes any previously recorded number. These are new metrics on
+unchanged weights.
+
+Confidence intervals on the malignant call (2026-11-03)
+-------------------------------------------------------
+Recall and precision on the malignant call share a numerator, and their
+denominators move together as the sample changes: one more malignant
+lesion grows recall's denominator, one more false alarm grows precision's.
+A Wilson interval looks at one ratio at a time and cannot see that, so
+these two were bootstrapped instead: redraw 1521 images with replacement,
+recompute both, 10000 times, keep the middle 95%. Seeded, so the command
+prints the same range every time.
+
+Validation, top-class rule:
+
+    metric       value          bootstrap            Wilson     width
+    recall      77.5%   72.6% - 82.1%   72.4% - 81.9%    9.5pt
+    precision   58.8%   53.9% - 63.7%   53.8% - 63.6%    9.8pt
+
+What the numbers say
+--------------------
+Recall is 77.5% and could reasonably have been anywhere from 72.6% to
+82.1%. Precision is 58.8% against a range of 53.9% to 63.7%. Both are
+about ten points wide, which is the honest resolution of a 1521-image
+split, and worth knowing before quoting either to one decimal place.
+
+The two methods agree, and that is not what I expected. I went into this
+assuming the bootstrap would come out wider for precision, because it
+sees the denominator move and Wilson does not. It does not: the bounds
+differ by at most 0.2 points and the widths match to one decimal.
+
+The reason is sample size. At 293 malignant lesions and 386 malignant
+calls, the denominators barely wobble compared with the numerators, so
+the effect Wilson misses is too small to show up. The shared numerator
+matters for how the two metrics move together, not for how wide either
+one is on its own.
+
+So the bootstrap did not buy a different number here. It bought a check:
+two unrelated methods on the same data landing in the same place is
+evidence that neither is wrong. For these two metrics, at this sample
+size, Wilson would have been enough. That stops being true for a
+statistic with no closed form, which is where the bootstrap earns its
+keep, and it is why the function stays.
+
+Nothing measured changes. These are ranges around figures already
+recorded in this file.

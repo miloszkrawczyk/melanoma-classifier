@@ -10,14 +10,18 @@ nothing about HTTP, so it can be called from a test, a script or a notebook
 just as easily.
 """
 
+import threading
+import time
+from collections import deque
 from io import BytesIO
 
 import gradio as gr
-from fastapi import FastAPI, HTTPException, Response, UploadFile
-from PIL import Image, UnidentifiedImageError
+from fastapi import FastAPI, HTTPException, Request, Response, UploadFile
 
 from frontend.ui import CSS, HEAD, THEME, build_ui
 from src.predict import Predictor
+from src.ratelimit import TooManyRequests, note_request
+from src.uploads import NotAnImage, TooLarge, open_upload
 
 app = FastAPI(
     title="Melanoma classifier",
@@ -33,14 +37,54 @@ app = FastAPI(
 predictor = Predictor()
 
 
+# Who has asked for what lately, and the lock that keeps the two handlers from
+# treading on it. The lock is not decoration: the handlers below run in
+# starlette's worker threads, so this is the one thing they share.
+#
+# Three things this cannot do, worth knowing before trusting it.
+# Behind a proxy, request.client is the proxy, so every caller lands in the
+# same bucket. Reading X-Forwarded-For would fix that only by trusting a header
+# the caller writes, which trades one hole for another. The count lives in this
+# process, so uvicorn --workers N gives N independent counters and N times the
+# limit, and a restart forgets everything. And the Gradio page calls the
+# Predictor directly rather than over HTTP, so none of this applies to it: this
+# guards the JSON API, not the demo.
+recent_requests = deque()
+recent_requests_lock = threading.Lock()
+
+
+def check_rate_limit(request):
+    """Let this request through, or refuse it as too frequent."""
+    # request.client is None for an ASGI transport that does not report one,
+    # which happens in tests. Lumping those together is right: they are all
+    # the same unknown caller.
+    client = request.client.host if request.client else "unknown"
+
+    with recent_requests_lock:
+        try:
+            # monotonic, not time(), so the limit cannot be slipped by the
+            # clock being put back or a daylight saving change.
+            note_request(recent_requests, client, time.monotonic())
+        except TooManyRequests as refusal:
+            raise HTTPException(status_code=429, detail=str(refusal))
+
+
 def read_image(file):
-    """Open an upload as a picture, or say plainly that it was not one."""
+    """Turn an upload into a picture, or into the right refusal.
+
+    The deciding happens in src.uploads, which knows nothing about HTTP. All
+    this adds is the status code each refusal deserves.
+    """
     try:
-        return Image.open(file.file)
-    except UnidentifiedImageError:
+        return open_upload(file.file)
+    except NotAnImage as refusal:
         # 400 means "your request was wrong", as against 500 which would mean
         # "our code broke". Sending a text file here is the caller's mistake.
-        raise HTTPException(status_code=400, detail="that file is not an image")
+        raise HTTPException(status_code=400, detail=str(refusal))
+    except TooLarge as refusal:
+        # 413 rather than 400, because the request was the right shape and the
+        # only thing wrong with it was its size.
+        raise HTTPException(status_code=413, detail=str(refusal))
 
 
 @app.get("/health")
@@ -55,8 +99,19 @@ def health():
     return {"status": "ok"}
 
 
+# Not async, deliberately. Both handlers run the model, which blocks and awaits
+# nothing, and an async handler doing that holds the event loop for the whole
+# call, so requests queue instead of overlapping. Declared plain, starlette
+# hands them to its worker threads and they genuinely run side by side.
+# Measured with the six example photos: /explain takes 0.11 s one after another
+# against 0.05 s overlapping.
+#
+# That only became safe together with the change in gradcam.py. While requests
+# were serialised by accident, the shared hook state there could not be caught
+# out; letting them overlap without fixing it would have traded a slow service
+# for one that answers with another request's heatmap.
 @app.post("/predict")
-async def predict(file: UploadFile):
+def predict(request: Request, file: UploadFile):
     """Take one photo of a skin lesion and answer three questions about it.
 
     Whether the picture is a skin lesion at all, which diagnosis it looks like,
@@ -64,6 +119,8 @@ async def predict(file: UploadFile):
     the model can be sure a lesion is malignant while having no idea which of
     the three malignant diagnoses it is looking at.
     """
+    check_rate_limit(request)
+
     return predictor.predict(read_image(file))
 
 
@@ -72,7 +129,7 @@ async def predict(file: UploadFile):
     responses={200: {"content": {"image/png": {}}}},
     response_class=Response,
 )
-async def explain(file: UploadFile):
+def explain(request: Request, file: UploadFile):
     """Return the photo with a heatmap of what the answer rested on.
 
     An image rather than JSON, because the point is to be looked at. If the
@@ -80,6 +137,8 @@ async def explain(file: UploadFile):
     on a ruler or a hair in the corner, the answer is worth nothing however
     confident it sounded.
     """
+    check_rate_limit(request)
+
     picture = predictor.explain(read_image(file))
 
     # PNG rather than JPEG. The heatmap has large flat areas of one colour,

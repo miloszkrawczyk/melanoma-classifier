@@ -67,6 +67,65 @@ MALIGNANT_THRESHOLD: float = 0.15
 CONFIDENCE_THRESHOLD: float = 0.60
 
 
+# *** Reporting uncertainty ***
+# Every metric here is a proportion measured on a finite sample, so each one
+# carries a range it could plausibly have landed in. 95% is what medical
+# papers quote, and picking anything else invites the question why.
+INTERVAL_PERCENT: int = 95
+
+# The normal quantile matching INTERVAL_PERCENT above. These two have to move
+# together: 90% is 1.645, 99% is 2.576. Written out rather than taken from
+# scipy.stats, because one number with a comment is cheaper than a dependency
+# for one number.
+#
+# Named INTERVAL rather than CONFIDENCE on purpose. CONFIDENCE_THRESHOLD above
+# is how sure the model says it is, which has nothing to do with this.
+INTERVAL_Z: float = 1.96
+
+# How many times the bootstrap redraws the split. Measured: 10000 resamples of
+# 1521 images cost 0.1 s, which is nothing against the 40 s the scoring pass
+# itself takes. 1000 would be ten times quicker and leave the bounds wobbling
+# in the third digit between runs, which defeats the point of reporting them.
+BOOTSTRAP_RESAMPLES: int = 10000
+
+
+# *** Limits on what the service accepts ***
+# Measured over the dataset: HAM10000 photos run 83 KB to 479 KB, averaging
+# 270 KB, and the examples shipped with the interface sit between 231 and
+# 333 KB. A photo straight off a current phone reaches a few megabytes. 8 MB
+# clears all of that and turns away anything that is not a photograph.
+#
+# This is not a guard against the bytes arriving. Starlette has already
+# buffered the whole body before a handler runs, spooling to a temporary file
+# past 1 MB, and caps nothing. It is a guard against handing them to the model.
+# A real byte cap belongs in the reverse proxy in front of the app.
+MAX_UPLOAD_BYTES: int = 8 * 1024 * 1024
+
+# The byte limit above does not catch a decompression bomb: a PNG of a few tens
+# of kilobytes can declare 10000x10000, which is 400 MB once decoded. PIL waves
+# that through, since its own MAX_IMAGE_PIXELS is 89.5 Mpx and it only raises
+# above twice that. Neither limit contains the other, because an 8 MB JPEG can
+# easily be 50 Mpx.
+#
+# 50 Mpx is what the best phone cameras produce today, so anything lower would
+# start refusing real photographs. Decoded it is around 150 MB, which the
+# service survives. Named UPLOAD rather than IMAGE to stay clearly apart from
+# PIL.Image.MAX_IMAGE_PIXELS, which is a different number for a different job.
+MAX_UPLOAD_PIXELS: int = 50_000_000
+
+# How often one caller may ask. Measured against a running server: a single
+# client pushes 81 requests a second through /predict on one thread and 295 on
+# eight, which is 17715 a minute. A person looking at the demo, examples and
+# own photos included, manages maybe 15 a minute.
+#
+# So 60 a minute leaves a person four times the room they need while capping a
+# script at a third of a percent of what the machine can do. The limit is not
+# here to protect the CPU from a human; it is here so one script cannot take
+# the service away from everybody else.
+RATE_LIMIT_REQUESTS: int = 60
+RATE_LIMIT_WINDOW_SECONDS: int = 60
+
+
 # *** Turning away photos that are not skin lesions ***
 # A classifier can only ever answer with one of the classes it was taught. Ask
 # it about a checkerboard and it names a diagnosis, confidently. Measured on

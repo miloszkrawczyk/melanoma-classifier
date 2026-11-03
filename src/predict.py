@@ -29,8 +29,9 @@ from src.config import (
     SKIN_RED_TOLERANCE,
 )
 from src.device import pick_device
-from src.gradcam import GradCAM, last_conv_layer, overlay
+from src.gradcam import heatmap, last_conv_layer, overlay
 from src.models.resnet import build_resnet18
+from src.weights import load_weights
 
 MALIGNANT_INDEXES = [CLASSES.index(dx) for dx in MALIGNANT_CLASSES]
 
@@ -95,9 +96,11 @@ class Predictor:
         # pretrained=False: the fine-tuned weights land on top of this a
         # line later, so downloading ImageNet's first would be wasted.
         self.model = build_resnet18(pretrained=False).to(self.device)
-        self.model.load_state_dict(
-            torch.load(settings["weights"], map_location=self.device)
-        )
+        # safetensors if one is there, the pickle otherwise, and never
+        # unpickling anything but tensors. The README tells people to download
+        # these weights from the Hugging Face Hub, so this reads a file that
+        # came off the internet.
+        self.model.load_state_dict(load_weights(settings["weights"]))
         # Without eval() the BatchNorm layers would read statistics off the
         # current batch. A batch of one photo would then depend on itself, and
         # the same picture would score differently every time.
@@ -114,10 +117,11 @@ class Predictor:
             mean=settings["mean"], std=settings["std"]
         )
 
-        # Built here rather than per request, because it hangs hooks on the
-        # model. Registering them again on every call would stack them up until
-        # the process ran out of memory.
-        self.gradcam = GradCAM(self.model, last_conv_layer(self.model, "resnet"))
+        # Only the layer is kept. The hook that reads it goes on and comes off
+        # inside each call, which is what keeps two requests from reading each
+        # other's activations. Leaving a hook registered for the life of the
+        # process is what made that possible before.
+        self.layer = last_conv_layer(self.model, "resnet")
 
     def explain(self, image):
         """The photo with a heatmap of where the answer came from painted on.
@@ -135,7 +139,7 @@ class Predictor:
 
         # No no_grad() around this one. Grad-CAM is built out of gradients, so
         # switching them off would leave it nothing to work with.
-        cam = self.gradcam.heatmap(batch, top)
+        cam = heatmap(self.model, self.layer, batch, top)
 
         return overlay(image, cam)
 

@@ -13,8 +13,10 @@ venv/
 # Too big for git and anyone can re-download it with scripts/download_data.py
 data/
 
-# Trained weights. Reproducible by running the training, so nothing to version here.
+# Trained weights, in either format. Reproducible by running the training,
+# so nothing to version here.
 *.pth
+*.safetensors
 
 # Kaggle API token. Never commit this, it is a private key to my account.
 kaggle.json
@@ -37,3 +39,8 @@ kaggle.json
 
 # macOS
 .DS_Store
+
+# My working notes while going through this project's open problems: the list
+# of steps I am working from and a log of what each one changed. Mine rather
+# than the project's, and in Polish, so they have no place in a public repo.
+notes/

@@ -84,3 +84,65 @@ number is stable and it should not be quoted without saying so.
 
 This file is the last measurement. Anything tuned after this would need a
 fresh test set to be honest about.
+
+Correction (2026-11-01)
+-----------------------
+The top-class rule section above reports "accuracy 74.9%, against 67.2% for a
+model that answers nv every time". The second number is wrong.
+
+67.2% was hard-coded into evaluate.py and printed for every split. It is right
+for validation, where 1022 of 1521 images are nv, and wrong here: the test set
+holds 967 nv out of 1508, so a model answering nv every time scores 64.1%.
+
+The error understated the model rather than flattering it. Against the correct
+baseline, 74.9% accuracy is 10.8 points of margin, not the 7.7 this file
+implied.
+
+Nothing measured on the model changes. Every other figure here stands, and so
+does the 67.2% in results/01 through results/04, which are all validation runs.
+The baseline is now computed from the labels of whichever split is being
+scored, so it cannot drift away from the data again.
+
+Confidence intervals (2026-11-03)
+---------------------------------
+Every figure above is a proportion measured on a finite sample, so each
+one carries a range it could plausibly have landed in. Adding those ranges
+needs no new measurement: a Wilson interval is arithmetic on the two counts
+already printed here, so the test set is still at the one run recorded at
+the top of this file.
+
+The threshold rule at 0.15, which is what the app uses:
+
+    recall       92.0%   88.5% - 94.5%   (289 of 314)
+    precision    43.0%   39.3% - 46.8%   (289 of 672)
+
+Recall per class, under the top-class rule:
+
+    class      recall        95% CI     width   caught
+    akiec      53.3%  40.9% -  65.4%   24.5pt   32/60
+    bcc        72.2%  61.4% -  80.8%   19.4pt   57/79
+    bkl        45.6%  38.8% -  52.6%   13.8pt   89/195
+    df         75.0%  46.8% -  91.1%   44.3pt   9/12
+    mel        66.3%  59.0% -  72.9%   13.9pt   116/175
+    nv         83.4%  80.9% -  85.6%    4.7pt   806/967
+    vasc      100.0%  83.9% - 100.0%   16.1pt   20/20
+
+What the numbers say
+--------------------
+The headline recall holds up. 92.0% with a range of 88.5% to 94.5% is a
+number worth quoting, and the 93.9% validation promised sits inside it.
+
+The per-class table is where this changes something. Until now it gave
+every class equal weight, and the ranges show they are nothing alike. nv
+rests on 967 images and moves 4.7 points. df rests on 12 and moves 44.3.
+Its 75.0% recall is anywhere from 46.8% to 91.1%, which spans 'barely
+better than a coin' to 'excellent'. The number is not wrong, it is close
+to uninformative, and quoting it without this range implies a precision
+that twelve images cannot carry.
+
+vasc is the same story with the opposite sign. 100.0% recall looks
+perfect and means 20 of 20, which is consistent with a true rate as low
+as 83.9%. A single miss would have made it 95%.
+
+Nothing measured changes. These are ranges around figures already
+recorded, computed from the counts in this file.

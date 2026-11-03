@@ -24,6 +24,7 @@ from src.data import build_dataloaders, load_metadata, split_metadata
 from src.device import pick_device
 from src.models.cnn import SkinLesionCNN
 from src.models.resnet import build_resnet18
+from src.weights import safetensors_beside, save_weights
 
 
 def build_model(name):
@@ -120,9 +121,12 @@ if __name__ == "__main__":
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            torch.save(model.state_dict(), settings["weights"])
+            save_weights(model.state_dict(), settings["weights"])
             line += "  <- saved"
 
         print(line)
 
-    print(f"best validation loss: {best_val_loss:.4f}, weights in {settings['weights']}")
+    # The path the config names is the old .pth; save_weights writes the
+    # safetensors sibling, and this has to say which file actually appeared.
+    saved_to = safetensors_beside(settings["weights"])
+    print(f"best validation loss: {best_val_loss:.4f}, weights in {saved_to}")
