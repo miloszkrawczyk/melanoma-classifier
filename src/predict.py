@@ -29,7 +29,7 @@ from src.config import (
     SKIN_RED_TOLERANCE,
 )
 from src.device import pick_device
-from src.gradcam import GradCAM, last_conv_layer, overlay
+from src.gradcam import heatmap, last_conv_layer, overlay
 from src.models.resnet import build_resnet18
 
 MALIGNANT_INDEXES = [CLASSES.index(dx) for dx in MALIGNANT_CLASSES]
@@ -114,10 +114,11 @@ class Predictor:
             mean=settings["mean"], std=settings["std"]
         )
 
-        # Built here rather than per request, because it hangs hooks on the
-        # model. Registering them again on every call would stack them up until
-        # the process ran out of memory.
-        self.gradcam = GradCAM(self.model, last_conv_layer(self.model, "resnet"))
+        # Only the layer is kept. The hook that reads it goes on and comes off
+        # inside each call, which is what keeps two requests from reading each
+        # other's activations. Leaving a hook registered for the life of the
+        # process is what made that possible before.
+        self.layer = last_conv_layer(self.model, "resnet")
 
     def explain(self, image):
         """The photo with a heatmap of where the answer came from painted on.
@@ -135,7 +136,7 @@ class Predictor:
 
         # No no_grad() around this one. Grad-CAM is built out of gradients, so
         # switching them off would leave it nothing to work with.
-        cam = self.gradcam.heatmap(batch, top)
+        cam = heatmap(self.model, self.layer, batch, top)
 
         return overlay(image, cam)
 

@@ -13,6 +13,8 @@ those would score well and be useless. If the heat lands on the lesion, the
 network is looking at the right thing.
 """
 
+import threading
+
 import numpy as np
 import torch
 from PIL import Image
@@ -30,49 +32,55 @@ COLOUR_STOPS = (
 )
 
 
-class GradCAM:
-    """Records what the chosen layer saw, and how much it mattered."""
+def heatmap(model, layer, batch, class_index):
+    """A 0-1 map the size of the layer's own maps, usually 7x7.
 
-    def __init__(self, model, layer):
-        self.model = model
-        self.activations = None
-        self.gradients = None
+    Hooks are callbacks PyTorch runs as data passes through a layer, and there
+    is no other way to reach inside a network mid-pass. Two details here are
+    about living inside a web service rather than a script.
 
-        # Hooks are callbacks PyTorch runs as data passes through a layer. The
-        # forward one catches what the layer produced, the backward one catches
-        # how much each of those values pulled on the final answer. There is no
-        # other way to reach inside a network mid-pass.
-        layer.register_forward_hook(self._save_activations)
-        layer.register_full_backward_hook(self._save_gradients)
+    A hook belongs to the layer, not to the call that registered it, so it
+    fires for every forward going through that layer, another request's
+    included. Measured: a forward issued elsewhere overwrites what this one
+    captured. So the hook keeps only what its own thread produced, and is
+    taken off again on the way out.
 
-    def _save_activations(self, module, inputs, output):
-        self.activations = output.detach()
+    And the gradient comes from autograd.grad rather than backward(). Both give
+    the same map, but backward() writes a gradient onto all 11.2 million
+    parameters, 43 MB of buffers shared by every request, for numbers Grad-CAM
+    never reads. Asking for the one gradient that is wanted leaves them alone.
+    """
+    owner = threading.get_ident()
+    captured = {}
 
-    def _save_gradients(self, module, grad_input, grad_output):
-        self.gradients = grad_output[0].detach()
+    def save_activations(module, inputs, output):
+        if threading.get_ident() == owner:
+            captured["activations"] = output
 
-    def heatmap(self, batch, class_index):
-        """A 0-1 map the size of the layer's own maps, usually 7x7."""
-        self.model.zero_grad()
+    handle = layer.register_forward_hook(save_activations)
+    try:
+        logits = model(batch)
+        activations = captured["activations"]
 
-        logits = self.model(batch)
         # Backward from one class only. The heatmap answers "why this
         # diagnosis", so a different class gives a different picture.
-        logits[0, class_index].backward()
+        gradients = torch.autograd.grad(logits[0, class_index], activations)[0]
+    finally:
+        handle.remove()
 
-        # One number per map: how strongly it pushed the answer, averaged over
-        # its own width and height. This is what "gradient-weighted" means.
-        weights = self.gradients.mean(dim=[2, 3], keepdim=True)
+    # One number per map: how strongly it pushed the answer, averaged over
+    # its own width and height. This is what "gradient-weighted" means.
+    weights = gradients.mean(dim=[2, 3], keepdim=True)
 
-        cam = (weights * self.activations).sum(dim=1).squeeze(0)
-        # Negative values are evidence against the class, and drawing them
-        # would just muddy the picture.
-        cam = torch.relu(cam)
+    cam = (weights * activations.detach()).sum(dim=1).squeeze(0)
+    # Negative values are evidence against the class, and drawing them
+    # would just muddy the picture.
+    cam = torch.relu(cam)
 
-        if cam.max() > 0:
-            cam = cam / cam.max()
+    if cam.max() > 0:
+        cam = cam / cam.max()
 
-        return cam.cpu()
+    return cam.cpu()
 
 
 def colourise(values):

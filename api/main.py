@@ -55,8 +55,19 @@ def health():
     return {"status": "ok"}
 
 
+# Not async, deliberately. Both handlers run the model, which blocks and awaits
+# nothing, and an async handler doing that holds the event loop for the whole
+# call, so requests queue instead of overlapping. Declared plain, starlette
+# hands them to its worker threads and they genuinely run side by side.
+# Measured with the six example photos: /explain takes 0.11 s one after another
+# against 0.05 s overlapping.
+#
+# That only became safe together with the change in gradcam.py. While requests
+# were serialised by accident, the shared hook state there could not be caught
+# out; letting them overlap without fixing it would have traded a slow service
+# for one that answers with another request's heatmap.
 @app.post("/predict")
-async def predict(file: UploadFile):
+def predict(file: UploadFile):
     """Take one photo of a skin lesion and answer three questions about it.
 
     Whether the picture is a skin lesion at all, which diagnosis it looks like,
@@ -72,7 +83,7 @@ async def predict(file: UploadFile):
     responses={200: {"content": {"image/png": {}}}},
     response_class=Response,
 )
-async def explain(file: UploadFile):
+def explain(file: UploadFile):
     """Return the photo with a heatmap of what the answer rested on.
 
     An image rather than JSON, because the point is to be looked at. If the
