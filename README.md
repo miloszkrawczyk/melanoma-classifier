@@ -256,9 +256,12 @@ colours, greyscale images and diagrams, and it wrongly rejects 6 of 1521
 validation photos. It will happily accept a photograph of a textured beige
 wall. A real fix needs a second model trained on skin/not-skin pairs.
 
-**The weights are a pickle.** `.pth` files can execute code on load. Ours is
-safe because I made it, but `safetensors` would be the correct format for
-anything published.
+**The published weights are still a pickle.** `.pth` files execute whatever
+they contain when loaded, and the instruction above tells you to download one
+off the internet, so "mine is safe because I made it" was never the point.
+Loading now refuses anything that is not a tensor, training writes
+`safetensors`, and that is the format the container ships. What is still on the
+Hub is the original `.pth`, until I push the converted file.
 
 ## What I would do next
 

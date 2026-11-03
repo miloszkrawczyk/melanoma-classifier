@@ -197,13 +197,17 @@ BATCH_SIZE: int = 32
 # Trained weights land here, one file per model so training the ResNet does
 # not quietly wipe out the CNN. Gitignored, since running the training
 # rebuilds them and a binary blob is not worth versioning.
+#
+# Named .safetensors because that is what training writes and what the image
+# ships. load_weights still reads a .pth of the same name if that is all a
+# checkout has, so naming the preferred format here breaks nothing.
 WEIGHTS_DIR: Path = PROJECT_ROOT / "weights"
 
 # The two networks need different treatment, so every setting that differs
 # between them lives here rather than being edited by hand between runs.
 MODELS: dict = {
     "cnn": {
-        "weights": WEIGHTS_DIR / "cnn.pth",
+        "weights": WEIGHTS_DIR / "cnn.safetensors",
         # Its own statistics, because nothing constrains a network built here.
         "mean": HAM10000_MEAN,
         "std": HAM10000_STD,
@@ -215,7 +219,7 @@ MODELS: dict = {
         "epochs": 40,
     },
     "resnet": {
-        "weights": WEIGHTS_DIR / "resnet.pth",
+        "weights": WEIGHTS_DIR / "resnet.safetensors",
         # ImageNet's statistics, because that is what its filters were fed
         # during pretraining.
         "mean": IMAGENET_MEAN,

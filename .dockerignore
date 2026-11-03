@@ -20,5 +20,7 @@ results/
 deploy/
 
 # Only the ResNet is served. The from-scratch CNN stays a baseline for the
-# README and has no business in a production image.
+# README and has no business in a production image. Both formats, because the
+# old pickle is still on disk next to the one training writes now.
 weights/cnn.pth
+weights/cnn.safetensors

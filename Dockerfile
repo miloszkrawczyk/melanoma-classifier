@@ -57,9 +57,13 @@ COPY frontend/ frontend/
 
 # Not in the GitHub repo: 43 MB of weights are gitignored, so a plain clone
 # followed by "docker build" stops here saying the file is missing. Either
-# rebuild them with "uv run python -m src.train resnet", or take the deployed
-# copy, where the weights live alongside the code in the Space's own repo.
-COPY weights/resnet.pth weights/resnet.pth
+# rebuild them with "uv run python -m src.train resnet", or convert the ones
+# you already have with "uv run python -m scripts.convert_weights".
+#
+# safetensors, not the .pth. Naming the old file here would have shipped
+# whatever was trained in August while the code outside the image read the
+# newer weights, and nothing would have failed to say so.
+COPY weights/resnet.safetensors weights/resnet.safetensors
 
 # Ownership handed over after the copying, since the user cannot write into
 # /app otherwise. Everything below this line runs unprivileged.

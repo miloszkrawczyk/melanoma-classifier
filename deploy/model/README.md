@@ -82,17 +82,21 @@ that the input is a skin photograph at all.
 ## Using it
 
 ```python
-import torch
-from torchvision.models import resnet18
 import torch.nn as nn
+from safetensors.torch import load_file
+from torchvision.models import resnet18
 
 CLASSES = ("akiec", "bcc", "bkl", "df", "mel", "nv", "vasc")
 
 model = resnet18()
 model.fc = nn.Linear(model.fc.in_features, len(CLASSES))
-model.load_state_dict(torch.load("resnet.pth", map_location="cpu"))
+model.load_state_dict(load_file("resnet.safetensors"))
 model.eval()
 ```
+
+`resnet.pth` is the same weights in PyTorch's own format and is kept for older
+code. Prefer the safetensors file: loading a `.pth` runs whatever the file
+contains, which is not something to do with a download.
 
 Input is 224x224 RGB normalised with the ImageNet statistics
 `mean=(0.485, 0.456, 0.406)`, `std=(0.229, 0.224, 0.225)`, because that is
