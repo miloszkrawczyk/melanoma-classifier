@@ -73,3 +73,47 @@ far apart, and this is the measure that shows it.
 
 Nothing here changes any previously recorded number. These are new metrics on
 unchanged weights.
+
+Confidence intervals on the malignant call (2026-11-03)
+-------------------------------------------------------
+Recall and precision on the malignant call share a numerator, and their
+denominators move together as the sample changes: one more malignant
+lesion grows recall's denominator, one more false alarm grows precision's.
+A Wilson interval looks at one ratio at a time and cannot see that, so
+these two were bootstrapped instead: redraw 1521 images with replacement,
+recompute both, 10000 times, keep the middle 95%. Seeded, so the command
+prints the same range every time.
+
+Validation, top-class rule:
+
+    metric       value          bootstrap            Wilson     width
+    recall      77.5%   72.6% - 82.1%   72.4% - 81.9%    9.5pt
+    precision   58.8%   53.9% - 63.7%   53.8% - 63.6%    9.8pt
+
+What the numbers say
+--------------------
+Recall is 77.5% and could reasonably have been anywhere from 72.6% to
+82.1%. Precision is 58.8% against a range of 53.9% to 63.7%. Both are
+about ten points wide, which is the honest resolution of a 1521-image
+split, and worth knowing before quoting either to one decimal place.
+
+The two methods agree, and that is not what I expected. I went into this
+assuming the bootstrap would come out wider for precision, because it
+sees the denominator move and Wilson does not. It does not: the bounds
+differ by at most 0.2 points and the widths match to one decimal.
+
+The reason is sample size. At 293 malignant lesions and 386 malignant
+calls, the denominators barely wobble compared with the numerators, so
+the effect Wilson misses is too small to show up. The shared numerator
+matters for how the two metrics move together, not for how wide either
+one is on its own.
+
+So the bootstrap did not buy a different number here. It bought a check:
+two unrelated methods on the same data landing in the same place is
+evidence that neither is wrong. For these two metrics, at this sample
+size, Wilson would have been enough. That stops being true for a
+statistic with no closed form, which is where the bootstrap earns its
+keep, and it is why the function stays.
+
+Nothing measured changes. These are ranges around figures already
+recorded in this file.

@@ -14,7 +14,9 @@ import src.evaluate as evaluate
 from src.config import CLASSES, METADATA_CSV
 from src.data import load_metadata, split_metadata
 from src.evaluate import (
+    bootstrap_malignant_intervals,
     confusion_matrix,
+    format_interval,
     is_malignant,
     majority_class_baseline,
     malignant_auc,
@@ -187,3 +189,54 @@ def test_wilson_interval_is_far_wider_for_a_small_class():
 
     assert (df_high - df_low) > 0.40
     assert (nv_high - nv_low) < 0.06
+
+
+def malignant_calls(size, truly_malignant, correctly_called):
+    """A split of the given size with a known recall, built by hand.
+
+    Avoids needing a model: these are just the two boolean columns that recall
+    and precision are computed from.
+    """
+    really = torch.zeros(size, dtype=torch.bool)
+    really[:truly_malignant] = True
+
+    called = torch.zeros(size, dtype=torch.bool)
+    called[:correctly_called] = True
+
+    return called, really
+
+
+def test_format_interval_names_the_confidence_level():
+    assert format_interval(0.723, 0.824) == "(95% CI 72.3% - 82.4%)"
+
+
+def test_bootstrap_interval_brackets_the_measured_recall():
+    called, really = malignant_calls(1000, truly_malignant=200, correctly_called=150)
+
+    (recall_low, recall_high), _ = bootstrap_malignant_intervals(called, really)
+
+    assert recall_low < 0.75 < recall_high
+
+
+def test_bootstrap_intervals_are_repeatable():
+    """Two runs of the same command have to print the same range.
+
+    The generator is seeded for this reason. Without it the bounds would
+    wander between runs and nobody could quote them.
+    """
+    called, really = malignant_calls(500, truly_malignant=100, correctly_called=80)
+
+    assert bootstrap_malignant_intervals(called, really) == (
+        bootstrap_malignant_intervals(called, really)
+    )
+
+
+def test_bootstrap_interval_narrows_on_a_bigger_split():
+    """Same recall, ten times the images, so the range has to tighten."""
+    small = malignant_calls(200, truly_malignant=40, correctly_called=30)
+    large = malignant_calls(2000, truly_malignant=400, correctly_called=300)
+
+    (small_low, small_high), _ = bootstrap_malignant_intervals(*small)
+    (large_low, large_high), _ = bootstrap_malignant_intervals(*large)
+
+    assert (large_high - large_low) < (small_high - small_low) / 2

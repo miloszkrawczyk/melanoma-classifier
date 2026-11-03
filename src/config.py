@@ -82,6 +82,12 @@ INTERVAL_PERCENT: int = 95
 # is how sure the model says it is, which has nothing to do with this.
 INTERVAL_Z: float = 1.96
 
+# How many times the bootstrap redraws the split. Measured: 10000 resamples of
+# 1521 images cost 0.1 s, which is nothing against the 40 s the scoring pass
+# itself takes. 1000 would be ten times quicker and leave the bounds wobbling
+# in the third digit between runs, which defeats the point of reporting them.
+BOOTSTRAP_RESAMPLES: int = 10000
+
 
 # *** Turning away photos that are not skin lesions ***
 # A classifier can only ever answer with one of the classes it was taught. Ask

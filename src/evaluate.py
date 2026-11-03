@@ -20,11 +20,13 @@ import torch
 from sklearn.metrics import average_precision_score, roc_auc_score
 
 from src.config import (
+    BOOTSTRAP_RESAMPLES,
     CLASSES,
     INTERVAL_PERCENT,
     INTERVAL_Z,
     MALIGNANT_CLASSES,
     MODELS,
+    SEED,
 )
 from src.data import build_dataloaders
 from src.device import pick_device
@@ -128,6 +130,54 @@ def wilson_interval(successes, total):
     return point, max(0.0, centre - half), min(1.0, centre + half)
 
 
+def format_interval(low, high):
+    """How a range is written next to the number it belongs to."""
+    return f"({INTERVAL_PERCENT}% CI {low:.1%} - {high:.1%})"
+
+
+def bootstrap_malignant_intervals(called_malignant, really_malignant):
+    """Ranges for recall and precision on the malignant call.
+
+    Wilson works off two counts, which is all per-class recall is. These two
+    are not that simple: they share a numerator, and their denominators move
+    together as the sample changes, since one more malignant lesion grows the
+    recall denominator while one more false alarm grows precision's. Wilson
+    looks at one ratio at a time and cannot see that.
+
+    So resample the split instead of the counts. Draw as many images as the
+    split holds, with replacement, recompute both numbers, and repeat. The
+    middle INTERVAL_PERCENT of what comes back is the interval.
+
+    Seeded from SEED, so running the same command twice prints the same range.
+    """
+    generator = torch.Generator().manual_seed(SEED)
+    size = len(really_malignant)
+
+    recalls = []
+    precisions = []
+
+    for _ in range(BOOTSTRAP_RESAMPLES):
+        drawn = torch.randint(0, size, (size,), generator=generator)
+        called = called_malignant[drawn]
+        really = really_malignant[drawn]
+
+        caught = int((called & really).sum())
+        # A draw with nothing malignant in it, or nothing called malignant,
+        # leaves that metric undefined rather than zero, so it sits out.
+        if really.any():
+            recalls.append(caught / int(really.sum()))
+        if called.any():
+            precisions.append(caught / int(called.sum()))
+
+    edge = (1 - INTERVAL_PERCENT / 100) / 2
+    bounds = []
+    for values in (recalls, precisions):
+        spread = torch.tensor(values)
+        bounds.append((float(spread.quantile(edge)), float(spread.quantile(1 - edge))))
+
+    return tuple(bounds)
+
+
 def is_malignant(labels):
     """True wherever the label is one of the three malignant diagnoses."""
     return torch.tensor([int(i) in MALIGNANT_INDEXES for i in labels])
@@ -189,11 +239,20 @@ def print_binary(predicted, actual):
     missed = int((~called_malignant & really_malignant).sum())
     false_alarms = int((called_malignant & ~really_malignant).sum())
 
+    recall = caught / (caught + missed)
+    precision = caught / (caught + false_alarms)
+
+    recall_range, precision_range = bootstrap_malignant_intervals(
+        called_malignant, really_malignant
+    )
+    recall_text = format_interval(*recall_range)
+    precision_text = format_interval(*precision_range)
+
     print(f"malignant lesions found:  {caught}")
     print(f"malignant lesions missed: {missed}")
     print(f"false alarms:             {false_alarms}")
-    print(f"recall on malignant:      {caught / (caught + missed):.1%}")
-    print(f"precision on malignant:   {caught / (caught + false_alarms):.1%}")
+    print(f"recall on malignant:      {recall:.1%}  {recall_text}")
+    print(f"precision on malignant:   {precision:.1%}  {precision_text}")
 
 
 def print_report(probabilities, actual, name, split):
