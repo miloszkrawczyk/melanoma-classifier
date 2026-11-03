@@ -20,6 +20,7 @@ from src.evaluate import (
     malignant_auc,
     parse_arguments,
     print_report,
+    wilson_interval,
 )
 
 
@@ -145,3 +146,44 @@ def test_malignant_auc_is_a_coin_flip_when_every_score_is_the_same():
     roc_auc, _ = malignant_auc(probabilities, actual)
 
     assert roc_auc == 0.5
+
+
+def test_wilson_interval_matches_the_recorded_test_recall():
+    """289 of 314 malignant lesions caught, the headline number in results/05."""
+    point, low, high = wilson_interval(289, 314)
+
+    assert f"{point:.1%}" == "92.0%"
+    assert f"{low:.1%} - {high:.1%}" == "88.5% - 94.5%"
+
+
+def test_wilson_interval_stays_inside_zero_and_one():
+    """The textbook formula does not, which is the reason for using Wilson.
+
+    At 0 of 10 it returns a range of zero width, and at 1 of 12 a negative
+    lower bound. Neither is a proportion.
+    """
+    _, none_low, none_high = wilson_interval(0, 10)
+    _, all_low, all_high = wilson_interval(10, 10)
+
+    assert none_low == 0.0
+    assert 0.0 < none_high < 1.0
+    assert 0.0 < all_low < 1.0
+    assert all_high == 1.0
+
+
+def test_wilson_interval_survives_a_class_with_no_images():
+    """print_per_class walks all seven classes, including any the split lacks."""
+    assert wilson_interval(0, 0) == (0.0, 0.0, 0.0)
+
+
+def test_wilson_interval_is_far_wider_for_a_small_class():
+    """The whole point: 75% off 12 images means much less than 83% off 967.
+
+    Both are real numbers from results/05, df against nv, and the table gave
+    them equal weight until now.
+    """
+    _, df_low, df_high = wilson_interval(9, 12)
+    _, nv_low, nv_high = wilson_interval(806, 967)
+
+    assert (df_high - df_low) > 0.40
+    assert (nv_high - nv_low) < 0.06

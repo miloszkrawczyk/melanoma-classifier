@@ -67,6 +67,22 @@ MALIGNANT_THRESHOLD: float = 0.15
 CONFIDENCE_THRESHOLD: float = 0.60
 
 
+# *** Reporting uncertainty ***
+# Every metric here is a proportion measured on a finite sample, so each one
+# carries a range it could plausibly have landed in. 95% is what medical
+# papers quote, and picking anything else invites the question why.
+INTERVAL_PERCENT: int = 95
+
+# The normal quantile matching INTERVAL_PERCENT above. These two have to move
+# together: 90% is 1.645, 99% is 2.576. Written out rather than taken from
+# scipy.stats, because one number with a comment is cheaper than a dependency
+# for one number.
+#
+# Named INTERVAL rather than CONFIDENCE on purpose. CONFIDENCE_THRESHOLD above
+# is how sure the model says it is, which has nothing to do with this.
+INTERVAL_Z: float = 1.96
+
+
 # *** Turning away photos that are not skin lesions ***
 # A classifier can only ever answer with one of the classes it was taught. Ask
 # it about a checkerboard and it names a diagnosis, confidently. Measured on

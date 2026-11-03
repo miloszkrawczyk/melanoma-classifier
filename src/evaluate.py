@@ -14,11 +14,18 @@ to be asked for deliberately:
 """
 
 import sys
+from math import sqrt
 
 import torch
 from sklearn.metrics import average_precision_score, roc_auc_score
 
-from src.config import CLASSES, MALIGNANT_CLASSES, MODELS
+from src.config import (
+    CLASSES,
+    INTERVAL_PERCENT,
+    INTERVAL_Z,
+    MALIGNANT_CLASSES,
+    MODELS,
+)
 from src.data import build_dataloaders
 from src.device import pick_device
 from src.train import build_model
@@ -94,6 +101,33 @@ def majority_class_baseline(actual):
     return CLASSES[commonest], int(counts[commonest]) / len(actual)
 
 
+def wilson_interval(successes, total):
+    """The point estimate and the range it could plausibly have landed in.
+
+    Wilson rather than the textbook p +/- z*sqrt(p(1-p)/n), which falls apart
+    exactly where this project needs it. df has 12 test images: at 1 of 12 the
+    textbook formula puts the lower bound at -7.3%, and at 0 of 10 it returns a
+    range of zero width, claiming certainty from no evidence. Wilson gives
+    1.5% and 0 to 27.8%.
+
+    Clamped to [0, 1], because a proportion cannot leave it and the formula
+    returns a hair below zero at 0 successes from rounding alone.
+    """
+    if not total:
+        return 0.0, 0.0, 0.0
+
+    point = successes / total
+    divisor = 1 + INTERVAL_Z**2 / total
+    centre = (point + INTERVAL_Z**2 / (2 * total)) / divisor
+    half = (
+        INTERVAL_Z
+        * sqrt(point * (1 - point) / total + INTERVAL_Z**2 / (4 * total**2))
+        / divisor
+    )
+
+    return point, max(0.0, centre - half), min(1.0, centre + half)
+
+
 def is_malignant(labels):
     """True wherever the label is one of the three malignant diagnoses."""
     return torch.tensor([int(i) in MALIGNANT_INDEXES for i in labels])
@@ -131,16 +165,19 @@ def print_per_class(matrix):
     answers "when it says melanoma, how often is it right". Recall is the one
     that matters here, because a missed cancer is worse than a false alarm.
     """
-    print(f"{'class':7}{'support':>9}{'recall':>9}{'precision':>11}")
+    heading = f"recall {INTERVAL_PERCENT}% CI"
+    print(f"{'class':7}{'support':>9}{'recall':>9}{heading:>18}{'precision':>11}")
+
     for i, name in enumerate(CLASSES):
         correct = int(matrix[i, i])
         real = int(matrix[i].sum())
         guessed = int(matrix[:, i].sum())
 
-        recall = correct / real if real else 0.0
+        recall, low, high = wilson_interval(correct, real)
         precision = correct / guessed if guessed else 0.0
+        interval = f"{low:.1%} - {high:.1%}"
 
-        print(f"{name:7}{real:>9}{recall:>8.1%}{precision:>11.1%}")
+        print(f"{name:7}{real:>9}{recall:>8.1%}{interval:>18}{precision:>11.1%}")
 
 
 def print_binary(predicted, actual):
