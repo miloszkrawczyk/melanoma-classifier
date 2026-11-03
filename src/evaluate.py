@@ -16,6 +16,7 @@ to be asked for deliberately:
 import sys
 
 import torch
+from sklearn.metrics import average_precision_score, roc_auc_score
 
 from src.config import CLASSES, MALIGNANT_CLASSES, MODELS
 from src.data import build_dataloaders
@@ -50,19 +51,25 @@ def parse_arguments(argv):
     return name, split
 
 
-def collect_predictions(model, loader, device):
-    """Run the whole loader and return what the model said next to the truth."""
+def collect_probabilities(model, loader, device):
+    """Run the whole loader and return the model's probabilities next to the truth.
+
+    The whole distribution rather than the winning class, because the
+    threshold-free scores further down need it and fetching it in a second
+    pass would double the time spent on the split. Nothing is lost: softmax
+    does not change which class is largest, so argmax gives the same answer.
+    """
     model.eval()
-    predicted = []
+    probabilities = []
     actual = []
 
     with torch.no_grad():
         for images, labels in loader:
-            guesses = model(images.to(device)).argmax(dim=1).cpu()
-            predicted.append(guesses)
+            logits = model(images.to(device))
+            probabilities.append(torch.softmax(logits, dim=1).cpu())
             actual.append(labels)
 
-    return torch.cat(predicted), torch.cat(actual)
+    return torch.cat(probabilities), torch.cat(actual)
 
 
 def confusion_matrix(predicted, actual):
@@ -85,6 +92,29 @@ def majority_class_baseline(actual):
     commonest = int(counts.argmax())
 
     return CLASSES[commonest], int(counts[commonest]) / len(actual)
+
+
+def is_malignant(labels):
+    """True wherever the label is one of the three malignant diagnoses."""
+    return torch.tensor([int(i) in MALIGNANT_INDEXES for i in labels])
+
+
+def malignant_auc(probabilities, actual):
+    """Two scores for the malignant call that do not depend on the threshold.
+
+    What gets ranked is the sum of the three malignant probabilities, the same
+    number predict.py compares against MALIGNANT_THRESHOLD. So these measure
+    the decision the app actually makes, not a neighbouring one.
+
+    PR-AUC is the one worth quoting. ROC-AUC counts true negatives, and with
+    four benign lesions for every malignant one there are so many of them that
+    it flatters anything. PR-AUC ignores them and asks only how well the
+    positives were found, which is the question when a miss is what costs.
+    """
+    scores = probabilities[:, MALIGNANT_INDEXES].sum(dim=1).numpy()
+    truth = is_malignant(actual).numpy()
+
+    return roc_auc_score(truth, scores), average_precision_score(truth, scores)
 
 
 def print_confusion_matrix(matrix):
@@ -115,12 +145,12 @@ def print_per_class(matrix):
 
 def print_binary(predicted, actual):
     """Collapse the seven diagnoses into the question people actually ask."""
-    is_malignant = torch.tensor([int(i) in MALIGNANT_INDEXES for i in predicted])
-    was_malignant = torch.tensor([int(i) in MALIGNANT_INDEXES for i in actual])
+    called_malignant = is_malignant(predicted)
+    really_malignant = is_malignant(actual)
 
-    caught = int((is_malignant & was_malignant).sum())
-    missed = int((~is_malignant & was_malignant).sum())
-    false_alarms = int((is_malignant & ~was_malignant).sum())
+    caught = int((called_malignant & really_malignant).sum())
+    missed = int((~called_malignant & really_malignant).sum())
+    false_alarms = int((called_malignant & ~really_malignant).sum())
 
     print(f"malignant lesions found:  {caught}")
     print(f"malignant lesions missed: {missed}")
@@ -129,8 +159,9 @@ def print_binary(predicted, actual):
     print(f"precision on malignant:   {caught / (caught + false_alarms):.1%}")
 
 
-def print_report(predicted, actual, name, split):
+def print_report(probabilities, actual, name, split):
     """Everything the command prints, in the order it prints it."""
+    predicted = probabilities.argmax(dim=1)
     matrix = confusion_matrix(predicted, actual)
 
     print(f"scoring {name} on the {split} set, {len(actual)} images")
@@ -147,6 +178,10 @@ def print_report(predicted, actual, name, split):
     )
     print()
     print_binary(predicted, actual)
+    print()
+    roc_auc, pr_auc = malignant_auc(probabilities, actual)
+    print(f"ROC-AUC on malignant:     {roc_auc:.3f}")
+    print(f"PR-AUC on malignant:      {pr_auc:.3f}")
 
 
 # Guarded for the same reason train.py is. Without it, importing this module
@@ -168,5 +203,5 @@ if __name__ == "__main__":
     model = build_model(name).to(device)
     model.load_state_dict(torch.load(settings["weights"], map_location=device))
 
-    predicted, actual = collect_predictions(model, loader, device)
-    print_report(predicted, actual, name, split)
+    probabilities, actual = collect_probabilities(model, loader, device)
+    print_report(probabilities, actual, name, split)

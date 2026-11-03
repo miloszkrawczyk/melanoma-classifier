@@ -15,7 +15,9 @@ from src.config import CLASSES, METADATA_CSV
 from src.data import load_metadata, split_metadata
 from src.evaluate import (
     confusion_matrix,
+    is_malignant,
     majority_class_baseline,
+    malignant_auc,
     parse_arguments,
     print_report,
 )
@@ -62,14 +64,22 @@ def test_confusion_matrix_puts_the_truth_in_rows():
     assert int(matrix.sum()) == len(actual)
 
 
+def one_hot(labels):
+    """Probabilities that put everything on the given class, as a perfect model would."""
+    return torch.nn.functional.one_hot(torch.tensor(labels), len(CLASSES)).float()
+
+
 def test_report_names_the_split_and_counts_the_images(capsys):
-    actual = torch.tensor([0, 1, 2])
-    print_report(actual, actual, "resnet", "val")
+    # One of each malignant class and one benign, so the AUC lines have both
+    # sides of the question to work with.
+    labels = [CLASSES.index(dx) for dx in ("akiec", "bcc", "mel", "nv")]
+    print_report(one_hot(labels), torch.tensor(labels), "resnet", "val")
 
     out = capsys.readouterr().out
 
-    assert "scoring resnet on the val set, 3 images" in out
+    assert "scoring resnet on the val set, 4 images" in out
     assert "accuracy: 100.0%" in out
+    assert "PR-AUC on malignant:      1.000" in out
 
 
 def test_an_unknown_model_is_rejected():
@@ -107,3 +117,31 @@ def test_majority_class_baseline_matches_the_documented_numbers():
 
     assert (val_name, f"{val_share:.1%}") == ("nv", "67.2%")
     assert (test_name, f"{test_share:.1%}") == ("nv", "64.1%")
+
+
+def test_is_malignant_marks_the_three_malignant_diagnoses():
+    labels = torch.tensor([CLASSES.index(dx) for dx in ("akiec", "bcc", "mel", "nv")])
+
+    assert is_malignant(labels).tolist() == [True, True, True, False]
+
+
+def test_malignant_auc_is_perfect_when_the_scores_separate_the_classes():
+    actual = torch.tensor([CLASSES.index("mel"), CLASSES.index("nv")])
+    # The melanoma gets all its mass on a malignant class, the mole none of it.
+    probabilities = one_hot([CLASSES.index("mel"), CLASSES.index("nv")])
+
+    assert malignant_auc(probabilities, actual) == (1.0, 1.0)
+
+
+def test_malignant_auc_is_a_coin_flip_when_every_score_is_the_same():
+    """A model that cannot tell the two apart has to score 0.5, not higher.
+
+    This is the test that would catch the scores being ranked the wrong way
+    round, which inverts the measure instead of breaking it.
+    """
+    actual = torch.tensor([CLASSES.index("mel"), CLASSES.index("nv")])
+    probabilities = torch.full((2, len(CLASSES)), 1 / len(CLASSES))
+
+    roc_auc, _ = malignant_auc(probabilities, actual)
+
+    assert roc_auc == 0.5

@@ -1,0 +1,75 @@
+Threshold-free metrics on validation
+====================================
+
+Every metric this project has quoted so far sits at one operating point: the
+0.15 malignant threshold, or the top class. None of them answer "how good is
+the ranking itself", which is the question that survives changing the
+threshold. These two do.
+
+Validation, 1521 images, 293 of them malignant (19.3%). The test set is not
+touched here and still stands at the single measurement in results/05.
+
+Validation is not impartial and these numbers inherit that. Not through the
+threshold, which is what makes them worth having, but through the weights:
+both models were saved at their best validation loss, so validation picked the
+epoch. Read them as an upper bound, not a forecast.
+
+Model
+-----
+Both models exactly as they stand in weights/, no retraining. ResNet18
+fine-tuned for 15 epochs, best epoch 7, weights/resnet.pth. The from-scratch
+CNN at 40 epochs, weights/cnn.pth. Same normalisation each was trained with,
+no augmentation at inference.
+
+    uv run python -m src.evaluate resnet
+    uv run python -m src.evaluate cnn
+
+Threshold-free metrics for the malignant call
+---------------------------------------------
+The score being ranked is the sum of the three malignant probabilities, which
+is the same number predict.py compares against MALIGNANT_THRESHOLD. So this
+measures the decision the app makes, not a neighbouring one.
+
+                        ResNet18       CNN     gap
+    ROC-AUC                0.910     0.868   0.042
+    PR-AUC                 0.721     0.544   0.177
+
+For context, at the operating points already recorded:
+
+                        ResNet18       CNN
+    accuracy               78.2%     62.2%
+    recall, top class      77.5%     77.8%
+    precision, top class   58.8%     44.7%
+    malignant missed          66        65
+
+A model answering nv every time scores 67.2% accuracy on this split. A model
+ranking at random scores PR-AUC 0.193, the share of malignant images, and
+ROC-AUC 0.500.
+
+What the numbers say
+--------------------
+ResNet18 ranks lesions well. PR-AUC 0.721 against a 0.193 floor means the
+malignant score carries real information, and it is the first number in this
+project that says so without resting on a threshold I chose by hand.
+
+The interesting part is the two gaps. On ROC-AUC the two models look almost
+alike, 0.910 against 0.868, a difference of 0.042. On PR-AUC the gap is 0.177,
+four times wider. The same two models, the same predictions, two measures that
+disagree about how different they are.
+
+ROC-AUC is the one that misleads here. It counts true negatives, and with four
+benign lesions for every malignant one, correctly ignoring moles is most of
+what either model does. Both are good at it, so both score well and the
+difference between them gets diluted. PR-AUC never looks at a true negative.
+It asks only how cleanly the 293 malignant lesions were pulled to the top, and
+on that the CNN is much worse. 0.177 is the honest size of the gap.
+
+This also settles something the top-class numbers made confusing. The CNN's
+recall, 77.8%, is slightly better than ResNet's 77.5%, and it misses one fewer
+malignant lesion, 65 against 66. Read on its own, that looks like a tie. It is
+not: the CNN raises 282 false alarms to ResNet's 159 to get there, and PR-AUC
+prices that in. Two models can miss the same number of cancers and still be
+far apart, and this is the measure that shows it.
+
+Nothing here changes any previously recorded number. These are new metrics on
+unchanged weights.
