@@ -188,6 +188,30 @@ IMAGENET_STD: tuple = (0.229, 0.224, 0.225)
 ROTATION_DEGREES: int = 20
 
 
+# *** Test-time augmentation ***
+# At inference the same photo is shown to the network four times, turned by a
+# quarter each time, and the four sets of probabilities are averaged. A lesion
+# has no top or bottom, so all four are equally fair readings of it, and the
+# answers differ only because convolution is not rotation invariant.
+#
+# Quarter turns rather than the ROTATION_DEGREES used in training: a turn by a
+# right angle is an exact permutation of pixels, with no interpolation and none
+# of the empty corners the comment above worries about.
+#
+# Measured on validation, 1521 images, same weights, threshold 0.15:
+#
+#                       recall  precision  missed  false alarms  PR-AUC
+#   no TTA               93.9%      41.1%      18           394   0.721
+#   four turns           95.2%      39.4%      14           430   0.742
+#   four turns + mirror  95.6%      39.8%      13           423   0.742
+#
+# Four misses fewer out of eighteen, and PR-AUC rises, which says the ranking
+# genuinely improved rather than sliding along the same curve. The price is 36
+# more false alarms. Mirroring adds 0.3 points of recall at identical PR-AUC,
+# so it buys nothing but time. Reproduce with scripts/measure_tta.py.
+TTA_QUARTER_TURNS: tuple = (0, 1, 2, 3)
+
+
 # *** Training ***
 # How many images the network looks at before it updates its weights. Small
 # enough to fit in a laptop's memory, large enough that one odd photo cannot

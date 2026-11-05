@@ -94,6 +94,15 @@ Same weights, same photos, different reading of the same seven numbers. For a
 screening tool the right-hand column is the right trade: a false alarm costs an
 appointment, a miss costs considerably more.
 
+**These figures predate one change the service has since made.** It now shows
+the network each photo four times, turned by a quarter each time, and averages
+the four answers. On validation that takes recall from 93.9% to 95.2%, four
+missed lesions out of eighteen, and raises PR-AUC from 0.721 to 0.742, which
+says the ranking improved rather than the operating point sliding. It costs 36
+more false alarms. The table above was measured before it, on the test set,
+which has been used once and is staying that way until there is a retrained
+model worth spending it on. See `results/07-tta.txt`.
+
 **Per class, taking the top class:**
 
 | class | | support | recall | precision |
