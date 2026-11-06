@@ -10,6 +10,7 @@ deterministic.
 import torch
 from PIL import Image
 
+from src.config import EARLY_STOPPING_PATIENCE, LR_PATIENCE
 from src.data import build_transform
 from src.models.cnn import SkinLesionCNN
 from src.models.resnet import build_resnet18
@@ -89,3 +90,64 @@ def test_augmentation_actually_varies_between_photos():
     second = augment(photo)
 
     assert not torch.equal(first, second)
+
+
+def test_the_learning_rate_drops_before_training_is_abandoned():
+    """Ordering between two patiences, and getting it wrong is silent.
+
+    If early stopping were the quicker of the two, training would be given up
+    before the smaller learning rate was ever tried, and the scheduler would
+    be decoration.
+    """
+    assert LR_PATIENCE < EARLY_STOPPING_PATIENCE
+
+
+def test_the_stopping_patience_survives_a_barren_stretch():
+    """Four is the measured minimum for this dataset, not a round number.
+
+    Replaying the validation losses recorded in results/04 through early
+    stopping:
+
+        patience   stops after   best epoch   best loss
+           1, 2, 3     4, 5, 6            3      0.6815
+           4                11            7      0.6373
+
+    That run went three epochs without improving (4 to 6) before its best one
+    at 7. A patience of 2 or 3, which is what most tutorials use, would have
+    stopped before it and kept a model 6.9% worse on its own loss. This test
+    exists so nobody tidies the number down to a more familiar one.
+    """
+    recorded_val_losses = [
+        1.1445,
+        0.7399,
+        0.6815,
+        0.7957,
+        0.8313,
+        0.7443,
+        0.6373,
+        0.7396,
+        0.6393,
+        0.6961,
+        0.6457,
+        0.6400,
+        0.7634,
+        0.7345,
+        0.6849,
+    ]
+
+    best = float("inf")
+    best_epoch = 0
+    barren = 0
+
+    for epoch, loss in enumerate(recorded_val_losses, start=1):
+        if loss < best:
+            best, best_epoch, barren = loss, epoch, 0
+        else:
+            barren += 1
+            if barren >= EARLY_STOPPING_PATIENCE:
+                break
+
+    assert best_epoch == 7, (
+        f"patience {EARLY_STOPPING_PATIENCE} would have kept epoch {best_epoch} "
+        f"at loss {best:.4f} instead of epoch 7 at 0.6373"
+    )

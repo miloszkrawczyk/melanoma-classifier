@@ -218,6 +218,47 @@ TTA_QUARTER_TURNS: tuple = (0, 1, 2, 3)
 # drag the whole update off course.
 BATCH_SIZE: int = 32
 
+# *** Regularisation and when to stop ***
+# Weight decay pulls every weight slightly towards zero on every step, which
+# keeps the network from fitting the training set in detail it cannot
+# generalise. It is needed here, and that part is measured: in results/04 the
+# training loss fell to 0.2505 while the validation loss bottomed at 0.6373 in
+# epoch 7 and then drifted up to 0.6849. A 2.7x gap is overfitting that has
+# already started.
+#
+# The value itself is convention, not measurement: 1e-4 is the usual starting
+# point for AdamW at these learning rates. Saying otherwise would be inventing
+# a measurement. The retraining run is what will show whether it earned its
+# place.
+WEIGHT_DECAY: float = 1e-4
+
+# How many epochs without a better validation loss before the learning rate is
+# cut. Has to stay below EARLY_STOPPING_PATIENCE, or training gets abandoned
+# before the smaller rate is ever tried. There is a test for that.
+LR_PATIENCE: int = 2
+
+# How far the rate drops when it does. A tenth is what ReduceLROnPlateau uses
+# by default, written out because a number that decides something does not
+# belong hidden inside a library call.
+LR_DROP: float = 0.1
+
+# How many epochs without improvement before giving up entirely.
+#
+# This one is measured, and the obvious answer would have been wrong. Replaying
+# the validation losses from results/04 through early stopping:
+#
+#   patience   stops after   best epoch   best loss
+#      1, 2, 3     4, 5, 6            3      0.6815
+#      4                11            7      0.6373
+#      5                12            7      0.6373
+#
+# That run had three barren epochs (4 to 6) before its best one at 7, so a
+# patience of 2 or 3, which is what most examples use, would have stopped
+# early and kept a model 6.9% worse on its own loss. Four is the measured
+# minimum; five leaves one epoch of margin over what this dataset has already
+# been seen to do.
+EARLY_STOPPING_PATIENCE: int = 5
+
 # Trained weights land here, one file per model so training the ResNet does
 # not quietly wipe out the CNN. Gitignored, since running the training
 # rebuilds them and a binary blob is not worth versioning.
@@ -251,7 +292,11 @@ MODELS: dict = {
         # Ten times smaller. Its weights are already good, so the point is to
         # nudge them, not to knock them out of place.
         "learning_rate": 0.0001,
-        # Fewer epochs too: it starts most of the way there.
-        "epochs": 15,
+        # A ceiling now, not a count: early stopping decides when to stop and
+        # this only says when to give up waiting. 15 was too low to be a
+        # ceiling, since the old run was still finding near-ties at epoch 12.
+        # Measured at 54 s an epoch, 30 is at most 27 minutes, and with the
+        # patience above a run should land between 12 and 20 epochs.
+        "epochs": 30,
     },
 }

@@ -21,7 +21,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from src.config import CLASSES, MODELS, SEED, WEIGHTS_DIR
+from src.config import (
+    CLASSES,
+    EARLY_STOPPING_PATIENCE,
+    LR_DROP,
+    LR_PATIENCE,
+    MODELS,
+    SEED,
+    WEIGHT_DECAY,
+    WEIGHTS_DIR,
+)
 from src.data import build_dataloaders, load_metadata, split_metadata
 from src.device import pick_device
 from src.models.cnn import SkinLesionCNN
@@ -138,28 +147,59 @@ if __name__ == "__main__":
 
     model = model.to(device)
     loss_fn = nn.CrossEntropyLoss(weight=class_weights(train_metadata).to(device))
-    optimizer = torch.optim.Adam(model.parameters(), lr=settings["learning_rate"])
+    # AdamW rather than Adam with weight_decay set. Adam adds the L2 penalty
+    # to the gradient before the adaptive step rescales it, so how hard a
+    # weight is pulled towards zero ends up depending on how large its
+    # gradients have been. AdamW applies the decay separately, which is the
+    # whole reason it exists and the only reason to prefer it here.
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=settings["learning_rate"],
+        weight_decay=WEIGHT_DECAY,
+    )
+
+    # Cuts the learning rate when the validation loss stops improving, rather
+    # than on a timetable. It watches the same number early stopping watches,
+    # so the two cannot disagree about whether progress has stalled.
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, factor=LR_DROP, patience=LR_PATIENCE
+    )
 
     # Validation loss decides which weights are worth keeping. Training loss
     # keeps falling even once the network has started memorising, so it cannot
     # be the one to judge.
     best_val_loss = float("inf")
+    epochs_since_best = 0
 
     for epoch in range(1, settings["epochs"] + 1):
         train_loss = train_one_epoch(model, train_loader, loss_fn, optimizer, device)
         val_loss, val_accuracy = evaluate(model, val_loader, loss_fn, device)
+        scheduler.step(val_loss)
 
         line = (
             f"epoch {epoch:2}: train loss {train_loss:.4f}, "
-            f"val loss {val_loss:.4f}, val accuracy {val_accuracy:.2%}"
+            f"val loss {val_loss:.4f}, val accuracy {val_accuracy:.2%}, "
+            f"lr {optimizer.param_groups[0]['lr']:.1e}"
         )
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
+            epochs_since_best = 0
             save_weights(model.state_dict(), settings["weights"])
             line += "  <- saved"
+        else:
+            epochs_since_best += 1
 
         print(line)
+
+        if epochs_since_best >= EARLY_STOPPING_PATIENCE:
+            # Said out loud, because a run that just ends looks like a crash
+            # and a log that stops early needs to say it meant to.
+            print(
+                f"stopping early: {EARLY_STOPPING_PATIENCE} epochs "
+                "without a better validation loss"
+            )
+            break
 
     # The path the config names is the old .pth; save_weights writes the
     # safetensors sibling, and this has to say which file actually appeared.
