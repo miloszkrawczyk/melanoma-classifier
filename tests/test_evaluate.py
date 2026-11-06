@@ -110,6 +110,11 @@ def test_majority_class_baseline_matches_the_documented_numbers():
     Reads the label column and nothing else: no model, no images, no
     predictions. The share of a class within a split is a property of the
     split, so this does not count as touching the test set.
+
+    These moved when the split started keeping class proportions. They used to
+    be 67.2% and 64.1%, and the 3.1 point gap between them was the symptom:
+    the two sets did not hold the same mix. They now agree to a tenth of a
+    point, which is the fix showing up in the one number that measures it.
     """
     _, val, test = split_metadata(load_metadata())
 
@@ -118,8 +123,8 @@ def test_majority_class_baseline_matches_the_documented_numbers():
         torch.tensor(test["label"].to_numpy())
     )
 
-    assert (val_name, f"{val_share:.1%}") == ("nv", "67.2%")
-    assert (test_name, f"{test_share:.1%}") == ("nv", "64.1%")
+    assert (val_name, f"{val_share:.1%}") == ("nv", "66.9%")
+    assert (test_name, f"{test_share:.1%}") == ("nv", "67.0%")
 
 
 def test_is_malignant_marks_the_three_malignant_diagnoses():

@@ -60,18 +60,64 @@ def load_metadata():
 def split_lesion_ids(metadata):
     """Deal the lesion ids into three groups: train, validation and test.
 
-    Splitting lesions rather than rows matters, because the dataset
-    photographs some lesions more than once. Split the rows and the same
-    lesion lands on both sides, so the test score would be measured on
-    pictures the model has already learned.
+    Two things have to hold at once, and they pull against each other.
+
+    No lesion may land in two sets. 1956 lesions are photographed more than
+    once, 4501 photos in all, so dealing rows instead of lesions would put the
+    same mole in training and in test and the score would come out flattering
+    and useless. That is what the grouping is for.
+
+    And every diagnosis has to keep its share of each set. The old deal did
+    not watch that: df is 115 photos in total and came out 82 / 21 / 12, so
+    its recall on the test set rested on twelve photos and carried a 95%
+    interval 44 points wide.
+
+    So the deal runs one class at a time and greedily: shuffle that class's
+    lesions, then hand each in turn to whichever set is furthest behind its
+    share of that class's photos.
+
+    What is counted is photos, not lesions, and that is the whole point. nv
+    averages 1.24 photos per lesion and mel 1.81, so an even deal of lesions
+    is not an even deal of photos. It is also why sklearn's
+    StratifiedGroupKFold was not used here: it balances groups, and measured
+    on this data it left df with 18 test photos but only 12 validation ones,
+    moving the problem rather than fixing it. It is built for groups that span
+    several classes, and no lesion here has more than one diagnosis.
+
+    Greedy partitioning usually wants the largest items dealt first, so the
+    small ones are left to close the gaps. Measured, it makes no difference to
+    the proportions here and costs something real: no lesion holds more than 6
+    photos, which is tiny against the smallest target in the table (17 photos,
+    df's share of a set), so ordering cannot strand anything. Dealing biggest
+    first did hold the proportions, but it swept the multi-photo lesions into
+    training and left it 4597 distinct lesions instead of 5227.
+
+    Measured: the worst a class sits from its target was 4.6 points before and
+    0.4 after. df goes from 82 / 21 / 12 photos to 81 / 17 / 17, and the
+    photos per lesion stay even across the three sets, 1.34 / 1.33 / 1.35.
     """
-    lesion_ids = sorted(metadata["lesion_id"].unique())
-    random.Random(SEED).shuffle(lesion_ids)
+    photos_per_lesion = metadata.groupby("lesion_id").size()
+    diagnosis_of = metadata.groupby("lesion_id")["dx"].first()
+    shares = (TRAIN_RATIO, VAL_RATIO, 1 - TRAIN_RATIO - VAL_RATIO)
 
-    train_end = int(len(lesion_ids) * TRAIN_RATIO)
-    val_end = train_end + int(len(lesion_ids) * VAL_RATIO)
+    dealt = ([], [], [])
+    shuffler = random.Random(SEED)
 
-    return lesion_ids[:train_end], lesion_ids[train_end:val_end], lesion_ids[val_end:]
+    for diagnosis in sorted(metadata["dx"].unique()):
+        lesion_ids = sorted(diagnosis_of[diagnosis_of == diagnosis].index)
+        shuffler.shuffle(lesion_ids)
+
+        photos = int(photos_per_lesion[lesion_ids].sum())
+        given = [0, 0, 0]
+
+        for lesion in lesion_ids:
+            behind = [share * photos - count for share, count in zip(shares, given)]
+            furthest = behind.index(max(behind))
+
+            dealt[furthest].append(lesion)
+            given[furthest] += int(photos_per_lesion[lesion])
+
+    return dealt
 
 
 def split_metadata(metadata):

@@ -114,3 +114,61 @@ def test_split_is_repeatable():
     second_train, _, _ = split_metadata(metadata)
 
     assert list(first_train["image_id"]) == list(second_train["image_id"])
+
+
+def shares_of_each_set(metadata, diagnosis):
+    """What fraction of one diagnosis's photos landed in each of the three sets."""
+    train, val, test = split_metadata(metadata)
+    counts = [int((part["dx"] == diagnosis).sum()) for part in (train, val, test)]
+
+    return [count / sum(counts) for count in counts]
+
+
+def test_every_class_keeps_its_share_of_each_set():
+    """The point of the whole step, and the thing the old split got wrong.
+
+    df is 115 photos in total. The old deal gave the test set twelve of them,
+    10.4% instead of 15%, and its recall there carried a 95% interval 44
+    points wide. One point of tolerance is loose enough for the arithmetic of
+    whole lesions and tight enough to fail on the old behaviour.
+    """
+    metadata = load_metadata()
+
+    for diagnosis in CLASSES:
+        train, val, test = shares_of_each_set(metadata, diagnosis)
+
+        assert abs(train - 0.70) < 0.01, diagnosis
+        assert abs(val - 0.15) < 0.01, diagnosis
+        assert abs(test - 0.15) < 0.01, diagnosis
+
+
+def test_no_class_disappears_from_a_set():
+    """A class with a handful of photos could otherwise miss a set entirely.
+
+    vasc has 142 photos and df 115. Scoring a class that is absent from
+    validation would divide by zero, and scoring one absent from test would
+    quietly report nothing at all.
+    """
+    metadata = load_metadata()
+    train, val, test = split_metadata(metadata)
+
+    for diagnosis in CLASSES:
+        for part in (train, val, test):
+            assert int((part["dx"] == diagnosis).sum()) > 0, diagnosis
+
+
+def test_the_sets_hold_comparably_many_photos_per_lesion():
+    """Guards an ordering choice that was measured and then undone.
+
+    Dealing the lesions with most photos first also holds the proportions, but
+    it sweeps the multi-photo lesions into training: 4597 distinct lesions
+    there instead of 5227, and 1.05 photos per lesion in test against 1.53 in
+    training. Evaluation wants independent lesions, so the sets should look
+    alike in this respect.
+    """
+    metadata = load_metadata()
+    parts = split_metadata(metadata)
+
+    per_lesion = [len(part) / part["lesion_id"].nunique() for part in parts]
+
+    assert max(per_lesion) - min(per_lesion) < 0.1
