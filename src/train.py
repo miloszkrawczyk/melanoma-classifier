@@ -14,17 +14,48 @@ ends with a pass over the validation set, so the weights that get saved are
 the ones that did best on photos the network never trained on.
 """
 
+import random
 import sys
 
+import numpy as np
 import torch
 import torch.nn as nn
 
-from src.config import CLASSES, MODELS, WEIGHTS_DIR
+from src.config import CLASSES, MODELS, SEED, WEIGHTS_DIR
 from src.data import build_dataloaders, load_metadata, split_metadata
 from src.device import pick_device
 from src.models.cnn import SkinLesionCNN
 from src.models.resnet import build_resnet18
 from src.weights import safetensors_beside, save_weights
+
+
+def set_seed(seed=SEED):
+    """Pin every generator the training run draws from.
+
+    The split was already repeatable: data.py shuffles lesion ids through
+    random.Random(SEED). Nothing else was. Four things draw from the global
+    generators and all four change the weights: the CNN's initialisation, the
+    new head on the ResNet, the order the training loader hands out batches,
+    and the flips, rotations and colour jitter of augmentation.
+
+    Without this, two runs of the same command produce different weights and
+    different numbers in results/, which makes comparing two runs meaningless.
+    That is about to matter more than usual: the frozen-backbone comparison
+    further along is supposed to differ in one thing only.
+
+    numpy is seeded although training never calls it directly, because pandas
+    and scikit-learn both sit on it and the stratified split uses sklearn.
+    Seeding it now is cheaper than working out later why a split will not come
+    out the same twice.
+
+    What this does not buy is bit-for-bit identical runs. Some MPS kernels are
+    not deterministic, so two runs land close rather than equal. Seeding
+    removes the avoidable difference, not the hardware's.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    # Covers the CPU generator and the MPS or CUDA one, whichever is in use.
+    torch.manual_seed(seed)
 
 
 def build_model(name):
@@ -87,6 +118,10 @@ def evaluate(model, loader, loss_fn, device):
 # Guarded, because evaluate.py imports build_model from here. Without the
 # guard, that import would run the whole training again.
 if __name__ == "__main__":
+    # Before the model is built, because building it is the first thing that
+    # draws from the generators.
+    set_seed()
+
     name = sys.argv[1] if len(sys.argv) > 1 else "cnn"
     model = build_model(name)
     settings = MODELS[name]

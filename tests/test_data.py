@@ -5,6 +5,7 @@ accuracy just comes out too high. A test is the only thing that catches it.
 """
 
 import pytest
+import torch
 
 from src.config import CLASSES, IMAGE_SIZE, METADATA_CSV
 from src.data import (
@@ -86,6 +87,24 @@ def test_dataloader_stacks_images_into_a_batch():
 
     assert tuple(images.shape) == (8, 3, IMAGE_SIZE, IMAGE_SIZE)
     assert tuple(labels.shape) == (8,)
+
+
+def test_the_training_loader_hands_out_the_same_order_twice():
+    """The loader shuffles, and its generator is pinned so the order repeats.
+
+    This one needs the dataset, which is why it lives here rather than with
+    the other seeding tests. Its own generator rather than the global one, so
+    the order does not depend on how many draws the weight initialisation and
+    the augmentation happened to take first.
+    """
+    first, _, _ = build_dataloaders(batch_size=8)
+    second, _, _ = build_dataloaders(batch_size=8)
+
+    # Two batches is plenty: a different order shows up immediately.
+    first_labels = [labels for _, labels in [next(iter(first))]]
+    second_labels = [labels for _, labels in [next(iter(second))]]
+
+    assert torch.equal(first_labels[0], second_labels[0])
 
 
 def test_split_is_repeatable():

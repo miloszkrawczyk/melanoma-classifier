@@ -6,6 +6,7 @@ validation and test, and handing out images one at a time as tensors.
 import random
 
 import pandas as pd
+import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
@@ -161,8 +162,14 @@ def build_dataloaders(batch_size=BATCH_SIZE, augment=False, mean=HAM10000_MEAN, 
 
     train, val, test = split_metadata(load_metadata())
 
+    # Its own generator rather than the global one. The order of an epoch then
+    # depends on this seed alone, instead of on how many draws the weight
+    # initialisation and the augmentation happened to take first.
     train_loader = DataLoader(
-        SkinLesionDataset(train, train_transform), batch_size=batch_size, shuffle=True
+        SkinLesionDataset(train, train_transform),
+        batch_size=batch_size,
+        shuffle=True,
+        generator=torch.Generator().manual_seed(SEED),
     )
     val_loader = DataLoader(
         SkinLesionDataset(val, plain_transform), batch_size=batch_size, shuffle=False
