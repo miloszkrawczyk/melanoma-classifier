@@ -24,6 +24,7 @@ from src.config import (
     MALIGNANT,
     MALIGNANT_CLASSES,
     METADATA_CSV,
+    NUM_WORKERS,
     ROTATION_DEGREES,
     SEED,
     TRAIN_RATIO,
@@ -196,12 +197,29 @@ class SkinLesionDataset(Dataset):
         return self.transform(image), self.labels[index]
 
 
-def build_dataloaders(batch_size=BATCH_SIZE, augment=False, mean=HAM10000_MEAN, std=HAM10000_STD):
+def build_dataloaders(
+    batch_size=BATCH_SIZE,
+    augment=False,
+    mean=HAM10000_MEAN,
+    std=HAM10000_STD,
+    num_workers=NUM_WORKERS,
+):
     """One loader per split, each handing out batches instead of single images.
 
     Only the training loader shuffles, and only it ever gets augmented. The
     other two are read end to end for a score, so a fixed order and a fixed
     recipe are what make two runs comparable.
+
+    num_workers is a parameter rather than read straight from the config, so a
+    test that only wants one batch can ask for none. Starting the processes
+    costs a few seconds, which is nothing against an epoch and most of the
+    runtime of a test.
+
+    persistent_workers keeps them alive between epochs, and on macOS that is
+    most of the point: processes are spawned rather than forked, so each one
+    re-imports torch on the way up. Measured on the real command, restarting
+    them every epoch gave 48 s against 54 s with no workers at all, barely
+    worth the trouble, while keeping them alive gave 34 s.
     """
     train_transform = build_transform(augment=augment, mean=mean, std=std)
     plain_transform = build_transform(augment=False, mean=mean, std=std)
@@ -215,13 +233,23 @@ def build_dataloaders(batch_size=BATCH_SIZE, augment=False, mean=HAM10000_MEAN, 
         SkinLesionDataset(train, train_transform),
         batch_size=batch_size,
         shuffle=True,
+        num_workers=num_workers,
+        persistent_workers=num_workers > 0,
         generator=torch.Generator().manual_seed(SEED),
     )
     val_loader = DataLoader(
-        SkinLesionDataset(val, plain_transform), batch_size=batch_size, shuffle=False
+        SkinLesionDataset(val, plain_transform),
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        persistent_workers=num_workers > 0,
     )
     test_loader = DataLoader(
-        SkinLesionDataset(test, plain_transform), batch_size=batch_size, shuffle=False
+        SkinLesionDataset(test, plain_transform),
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        persistent_workers=num_workers > 0,
     )
 
     return train_loader, val_loader, test_loader

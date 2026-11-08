@@ -218,6 +218,35 @@ TTA_QUARTER_TURNS: tuple = (0, 1, 2, 3)
 # drag the whole update off course.
 BATCH_SIZE: int = 32
 
+# How many processes decode and augment photos alongside the training loop.
+# Measured on the real command, three ResNet epochs over 7009 photos:
+#
+#   workers                      per epoch   speedup
+#     0                             54 s       1.0x
+#     2, restarted each epoch       48 s       1.14x
+#     2, kept alive between epochs  34 s       1.6x
+#
+# Two is the whole win on the loading side. In isolation the loaders reach 312
+# photos a second with none, 698 with two, 2616 with eight, while the model
+# consumes about 290, so once loading clears that, more processes have nothing
+# to do: four and eight were measurably no faster.
+#
+# The reason persistent_workers matters so much is macOS. It starts processes
+# by spawning rather than forking, so each worker re-imports torch, and both
+# the training and validation loaders rebuild theirs every epoch. Measured in
+# isolation with fork the epoch came out at 24 s, which the real command never
+# delivers: that number was 1.6x too good and is the reason these figures come
+# from "python -m src.train" and not from a snippet.
+#
+# This is this machine's number, not a universal one. On faster hardware the
+# model stops being the bottleneck and the threshold moves up.
+#
+# pin_memory is deliberately not set alongside this. PyTorch answers it with
+# "'pin_memory' argument is set as true but not supported on MPS now", and the
+# timings with and without are identical. It earns its place on CUDA, which is
+# neither this machine nor the CPU-only container.
+NUM_WORKERS: int = 2
+
 # *** Regularisation and when to stop ***
 # Weight decay pulls every weight slightly towards zero on every step, which
 # keeps the network from fitting the training set in detail it cannot

@@ -13,9 +13,19 @@ from src.config import CLASSES
 
 
 def conv_block(in_channels, out_channels):
-    """Find patterns, level the signal, drop the negatives, halve the map."""
+    """Find patterns, level the signal, drop the negatives, halve the map.
+
+    bias=False because BatchNorm comes next and subtracts the batch mean,
+    which removes any constant the convolution added. Checked rather than
+    assumed: adding 12.345 to every bias leaves the output after BatchNorm
+    unchanged to within floating point noise.
+
+    This is not a saving worth having on its own, at 480 numbers out of
+    391175. It is here so the model does not carry parameters that provably
+    cannot affect what it answers.
+    """
     return nn.Sequential(
-        nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+        nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
         nn.BatchNorm2d(out_channels),
         nn.ReLU(),
         nn.MaxPool2d(2),

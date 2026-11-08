@@ -81,7 +81,9 @@ def test_dataset_length_matches_the_metadata():
 
 
 def test_dataloader_stacks_images_into_a_batch():
-    train_loader, _, _ = build_dataloaders(batch_size=8)
+    # No workers: this only wants one batch, and starting them would cost
+    # more than everything else in this file put together.
+    train_loader, _, _ = build_dataloaders(batch_size=8, num_workers=0)
 
     images, labels = next(iter(train_loader))
 
@@ -96,6 +98,11 @@ def test_the_training_loader_hands_out_the_same_order_twice():
     the other seeding tests. Its own generator rather than the global one, so
     the order does not depend on how many draws the weight initialisation and
     the augmentation happened to take first.
+
+    It takes about twelve seconds, nearly all of it starting worker
+    processes, and it has to. Loading now runs in two of them, and whether
+    seeding survives that is exactly what this checks. Passing num_workers=0
+    here would make it quick and prove nothing.
     """
     first, _, _ = build_dataloaders(batch_size=8)
     second, _, _ = build_dataloaders(batch_size=8)
