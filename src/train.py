@@ -23,9 +23,7 @@ import torch.nn as nn
 
 from src.config import (
     CLASSES,
-    EARLY_STOPPING_PATIENCE,
     LR_DROP,
-    LR_PATIENCE,
     MODELS,
     SEED,
     WEIGHT_DECAY,
@@ -161,8 +159,12 @@ if __name__ == "__main__":
     # Cuts the learning rate when the validation loss stops improving, rather
     # than on a timetable. It watches the same number early stopping watches,
     # so the two cannot disagree about whether progress has stalled.
+    # Both patiences come from the model's own settings, not from one pair
+    # shared by both. Measured: the CNN needs fifteen where the ResNet needs
+    # five, because a network learning from scratch has a far noisier
+    # validation curve than a pretrained one being nudged.
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, factor=LR_DROP, patience=LR_PATIENCE
+        optimizer, factor=LR_DROP, patience=settings["lr_patience"]
     )
 
     # Validation loss decides which weights are worth keeping. Training loss
@@ -192,11 +194,11 @@ if __name__ == "__main__":
 
         print(line)
 
-        if epochs_since_best >= EARLY_STOPPING_PATIENCE:
+        if epochs_since_best >= settings["early_stopping_patience"]:
             # Said out loud, because a run that just ends looks like a crash
             # and a log that stops early needs to say it meant to.
             print(
-                f"stopping early: {EARLY_STOPPING_PATIENCE} epochs "
+                f"stopping early: {settings['early_stopping_patience']} epochs "
                 "without a better validation loss"
             )
             break

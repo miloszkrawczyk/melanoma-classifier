@@ -169,12 +169,18 @@ VAL_RATIO: float = 0.15
 IMAGE_SIZE: int = 224
 
 # Channel means and deviations of the training images, measured by
-# scripts/compute_stats.py over all 6986 of them. Skin close-ups come out
+# scripts/compute_stats.py over all 7009 of them. Skin close-ups come out
 # much brighter, much redder and far more alike than internet photos, so
 # the ImageNet figures below would centre the data in the wrong place.
 # These belong to the network trained from scratch.
+#
+# Remeasured after the split started keeping class proportions, because these
+# are properties of whichever photos ended up in training. The answer barely
+# moved: the means came back identical and one digit of one deviation changed,
+# 0.140 to 0.141. Worth knowing, since it says the old numbers were never the
+# problem, and worth redoing anyway so the count above is not a lie.
 HAM10000_MEAN: tuple = (0.764, 0.546, 0.571)
-HAM10000_STD: tuple = (0.140, 0.152, 0.169)
+HAM10000_STD: tuple = (0.141, 0.152, 0.169)
 
 # The same two figures measured across ImageNet. A model pretrained there
 # was fed input scaled exactly this way, so handing it anything else costs
@@ -261,32 +267,14 @@ NUM_WORKERS: int = 2
 # place.
 WEIGHT_DECAY: float = 1e-4
 
-# How many epochs without a better validation loss before the learning rate is
-# cut. Has to stay below EARLY_STOPPING_PATIENCE, or training gets abandoned
-# before the smaller rate is ever tried. There is a test for that.
-LR_PATIENCE: int = 2
-
-# How far the rate drops when it does. A tenth is what ReduceLROnPlateau uses
-# by default, written out because a number that decides something does not
-# belong hidden inside a library call.
+# How far the learning rate drops when it is cut. A tenth is what
+# ReduceLROnPlateau uses by default, written out because a number that decides
+# something does not belong hidden inside a library call.
+#
+# The two patiences that go with it are NOT here. They live per model in MODELS
+# below, because measuring them on one model and applying them to both is a
+# mistake I made and then caught: see the tables there.
 LR_DROP: float = 0.1
-
-# How many epochs without improvement before giving up entirely.
-#
-# This one is measured, and the obvious answer would have been wrong. Replaying
-# the validation losses from results/04 through early stopping:
-#
-#   patience   stops after   best epoch   best loss
-#      1, 2, 3     4, 5, 6            3      0.6815
-#      4                11            7      0.6373
-#      5                12            7      0.6373
-#
-# That run had three barren epochs (4 to 6) before its best one at 7, so a
-# patience of 2 or 3, which is what most examples use, would have stopped
-# early and kept a model 6.9% worse on its own loss. Four is the measured
-# minimum; five leaves one epoch of margin over what this dataset has already
-# been seen to do.
-EARLY_STOPPING_PATIENCE: int = 5
 
 # Trained weights land here, one file per model so training the ResNet does
 # not quietly wipe out the CNN. Gitignored, since running the training
@@ -308,9 +296,29 @@ MODELS: dict = {
         # Adam's own default. Starting from noise, the first steps have a long
         # way to travel.
         "learning_rate": 0.001,
-        # Augmentation made the task hard enough that 15 epochs cut the run
-        # short. Only the best epoch is kept, so overshooting costs time only.
-        "epochs": 40,
+        # Its own log says 40 was still too few: results/03 found its best at
+        # epoch 37 of 40 and was still improving when it ran out. 60 is a
+        # ceiling, and early stopping decides when to stop.
+        "epochs": 60,
+        # Measured on the losses recorded in results/03. That run went
+        # thirteen epochs without improving, epochs 14 to 26, and then found
+        # its best at 37:
+        #
+        #   patience   stops after   best epoch   best loss
+        #      5, 8, 10, 12   18-25           13      1.0269
+        #     15                 40           37      0.9478
+        #
+        # So anything under 14 keeps a model 8.3% worse on its own loss. A
+        # network learning from scratch has a far noisier validation curve
+        # than a pretrained one being nudged: standard deviation 0.169 across
+        # its epochs against the ResNet's 0.126.
+        "early_stopping_patience": 15,
+        # Five, not the ResNet's two. Two-epoch dips happen constantly on this
+        # curve, three times in the first ten epochs of results/03, and
+        # cutting the rate on each one leaves the model learning at 1e-5 while
+        # its training loss is still falling. Measured once with two: the run
+        # stopped at epoch 13, underfit.
+        "lr_patience": 5,
     },
     "resnet": {
         "weights": WEIGHTS_DIR / "resnet.safetensors",
@@ -324,8 +332,17 @@ MODELS: dict = {
         # A ceiling now, not a count: early stopping decides when to stop and
         # this only says when to give up waiting. 15 was too low to be a
         # ceiling, since the old run was still finding near-ties at epoch 12.
-        # Measured at 54 s an epoch, 30 is at most 27 minutes, and with the
-        # patience above a run should land between 12 and 20 epochs.
         "epochs": 30,
+        # Measured on the losses recorded in results/04. That run went three
+        # epochs without improving, 4 to 6, before its best at 7:
+        #
+        #   patience   stops after   best epoch   best loss
+        #      1, 2, 3       4, 5, 6            3      0.6815
+        #      4, 5           11, 12            7      0.6373
+        #
+        # Four is the minimum, five leaves a margin. Far smaller than the
+        # CNN's fifteen, because a pretrained network's curve is much calmer.
+        "early_stopping_patience": 5,
+        "lr_patience": 2,
     },
 }

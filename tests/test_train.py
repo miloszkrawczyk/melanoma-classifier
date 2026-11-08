@@ -7,10 +7,13 @@ not something a test can assert anyway, because some MPS kernels are not
 deterministic.
 """
 
+import re
+
+import pytest
 import torch
 from PIL import Image
 
-from src.config import EARLY_STOPPING_PATIENCE, LR_PATIENCE
+from src.config import MODELS, PROJECT_ROOT
 from src.data import build_transform
 from src.models.cnn import SkinLesionCNN
 from src.models.resnet import build_resnet18
@@ -92,62 +95,88 @@ def test_augmentation_actually_varies_between_photos():
     assert not torch.equal(first, second)
 
 
-def test_the_learning_rate_drops_before_training_is_abandoned():
-    """Ordering between two patiences, and getting it wrong is silent.
+def recorded_val_losses(results_file):
+    """The validation losses of a run this project actually did.
 
-    If early stopping were the quicker of the two, training would be given up
-    before the smaller learning rate was ever tried, and the scheduler would
-    be decoration.
+    Read from the file rather than pasted in, because results/ holds the
+    record of what happened and is never rewritten. Forty numbers would be a
+    lot to copy, and copying them would let the two drift apart.
     """
-    assert LR_PATIENCE < EARLY_STOPPING_PATIENCE
+    text = (PROJECT_ROOT / "results" / results_file).read_text()
+
+    return [float(loss) for loss in re.findall(r"val loss (\d+\.\d+)", text)]
 
 
-def test_the_stopping_patience_survives_a_barren_stretch():
-    """Four is the measured minimum for this dataset, not a round number.
+def epoch_early_stopping_would_keep(losses, patience):
+    """Which epoch's weights a given patience ends up keeping."""
+    best, best_epoch, barren = float("inf"), 0, 0
 
-    Replaying the validation losses recorded in results/04 through early
-    stopping:
-
-        patience   stops after   best epoch   best loss
-           1, 2, 3     4, 5, 6            3      0.6815
-           4                11            7      0.6373
-
-    That run went three epochs without improving (4 to 6) before its best one
-    at 7. A patience of 2 or 3, which is what most tutorials use, would have
-    stopped before it and kept a model 6.9% worse on its own loss. This test
-    exists so nobody tidies the number down to a more familiar one.
-    """
-    recorded_val_losses = [
-        1.1445,
-        0.7399,
-        0.6815,
-        0.7957,
-        0.8313,
-        0.7443,
-        0.6373,
-        0.7396,
-        0.6393,
-        0.6961,
-        0.6457,
-        0.6400,
-        0.7634,
-        0.7345,
-        0.6849,
-    ]
-
-    best = float("inf")
-    best_epoch = 0
-    barren = 0
-
-    for epoch, loss in enumerate(recorded_val_losses, start=1):
+    for epoch, loss in enumerate(losses, start=1):
         if loss < best:
             best, best_epoch, barren = loss, epoch, 0
         else:
             barren += 1
-            if barren >= EARLY_STOPPING_PATIENCE:
+            if barren >= patience:
                 break
 
-    assert best_epoch == 7, (
-        f"patience {EARLY_STOPPING_PATIENCE} would have kept epoch {best_epoch} "
-        f"at loss {best:.4f} instead of epoch 7 at 0.6373"
+    return best_epoch
+
+
+@pytest.mark.parametrize("name", ["cnn", "resnet"])
+def test_the_learning_rate_drops_before_training_is_abandoned(name):
+    """Ordering between the two patiences, and getting it wrong is silent.
+
+    If early stopping were the quicker of the two, training would be given up
+    before the smaller learning rate was ever tried, and the scheduler would
+    be decoration. Seen once for real: with both set to two, a run stopped at
+    epoch four and the rate never moved.
+    """
+    settings = MODELS[name]
+
+    assert settings["lr_patience"] < settings["early_stopping_patience"]
+
+
+def test_the_resnet_patience_survives_its_own_barren_stretch():
+    """Replays results/04, the run the ResNet's patience was measured on.
+
+    It went three epochs without improving, 4 to 6, before its best at 7. A
+    patience of 2 or 3, which is what most tutorials use, would have stopped
+    before it and kept a model 6.9% worse on its own loss.
+    """
+    losses = recorded_val_losses("04-resnet18.txt")
+    patience = MODELS["resnet"]["early_stopping_patience"]
+
+    assert epoch_early_stopping_would_keep(losses, patience) == 7
+
+
+def test_the_cnn_patience_survives_its_own_barren_stretch():
+    """Replays results/03, and this is the one that caught a real mistake.
+
+    The CNN's patience was first set to the ResNet's five. That run went
+    thirteen epochs without improving, 14 to 26, and then found its best at
+    37, so five stopped at epoch 13 and kept a model 8.3% worse. A network
+    learning from scratch has a much noisier curve than a pretrained one
+    being nudged, and one pair of patiences cannot serve both.
+    """
+    losses = recorded_val_losses("03-cnn-40-epochs.txt")
+    patience = MODELS["cnn"]["early_stopping_patience"]
+
+    assert epoch_early_stopping_would_keep(losses, patience) == 37
+
+
+def test_a_shared_patience_would_have_failed_one_of_them():
+    """Why the two numbers are per model rather than one constant.
+
+    Neither model's value works for the other: the ResNet's five stops the
+    CNN twenty-four epochs early, and the CNN's fifteen would have run the
+    ResNet to its ceiling rather than stopping it.
+    """
+    cnn_losses = recorded_val_losses("03-cnn-40-epochs.txt")
+    resnet_patience = MODELS["resnet"]["early_stopping_patience"]
+
+    kept = epoch_early_stopping_would_keep(cnn_losses, resnet_patience)
+
+    assert kept == 13, (
+        f"the ResNet's patience of {resnet_patience} keeps epoch {kept} of the "
+        "CNN's run, not its best at 37"
     )
