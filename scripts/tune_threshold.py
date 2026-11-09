@@ -21,28 +21,18 @@ import torch
 from src.config import CLASSES, MALIGNANT_CLASSES, MODELS
 from src.data import build_dataloaders
 from src.device import pick_device
+
+# Imported rather than copied. Before step 4 this script had its own, and
+# that one returned probabilities while evaluate.py returned the winning
+# class; step 4 made evaluate.py return probabilities too and left the two
+# identical without anyone noticing. Importing it is only possible because
+# evaluate.py has a __main__ guard: without it, this line would run a whole
+# scoring pass.
+from src.evaluate import collect_probabilities
 from src.train import build_model
 from src.weights import load_weights
 
 MALIGNANT_INDEXES = [CLASSES.index(dx) for dx in MALIGNANT_CLASSES]
-
-
-def collect_probabilities(model, loader, device):
-    """Run the validation set and keep the probabilities, not just the winner."""
-    model.eval()
-    probabilities = []
-    actual = []
-
-    with torch.no_grad():
-        for images, labels in loader:
-            logits = model(images.to(device))
-            # softmax turns the seven raw scores into seven probabilities that
-            # add up to 1. The training loss did this internally; here it has
-            # to be done by hand, because the numbers themselves are the point.
-            probabilities.append(torch.softmax(logits, dim=1).cpu())
-            actual.append(labels)
-
-    return torch.cat(probabilities), torch.cat(actual)
 
 
 def malignant_probability(probabilities):
