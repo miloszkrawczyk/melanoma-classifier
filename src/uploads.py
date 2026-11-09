@@ -53,7 +53,8 @@ def open_upload(stream):
 
     # The dimensions come from the header, so this refuses the picture while it
     # is still a few tens of kilobytes on disk rather than a few hundred
-    # megabytes in memory. That is the whole value of checking here.
+    # megabytes in memory. That is the whole value of checking here, and the
+    # reason it has to happen before the decode below.
     pixels = image.width * image.height
     if pixels > MAX_UPLOAD_PIXELS:
         raise TooLarge(
@@ -61,5 +62,21 @@ def open_upload(stream):
             f"{pixels // 10**6} megapixels against a limit of "
             f"{MAX_UPLOAD_PIXELS // 10**6}"
         )
+
+    # Image.open has only read the header, so a file whose header is fine and
+    # whose pixels are cut short gets this far happily. Measured: half of a
+    # valid JPEG opens without complaint and raises OSError on decode. Left
+    # alone, that OSError surfaces later inside the Predictor, where nothing
+    # can tell whose fault it was, and the caller gets a 500 for their own
+    # truncated upload. An upload cut short by a dropped connection does this.
+    #
+    # So the decode happens here, where it can still be answered for. Caught
+    # separately from the open above on purpose: UnidentifiedImageError is
+    # itself a subclass of OSError, and keeping the two apart says which stage
+    # reports what.
+    try:
+        image.load()
+    except OSError:
+        raise NotAnImage("that image is damaged or was cut short")
 
     return image

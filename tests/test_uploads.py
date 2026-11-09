@@ -85,3 +85,23 @@ def test_the_stream_is_rewound_for_the_caller():
     image = open_upload(photo())
 
     assert image.width == 600
+
+
+def test_a_truncated_photo_is_refused():
+    """The header parses and the pixels do not, which used to reach the model.
+
+    Measured: half of a valid JPEG opens without complaint and raises OSError
+    on decode. Before this, that OSError surfaced inside the Predictor and the
+    caller got a 500 for a file they had cut short themselves.
+    """
+    whole = photo().getvalue()
+
+    with pytest.raises(NotAnImage):
+        open_upload(io.BytesIO(whole[: len(whole) // 2]))
+
+
+def test_an_accepted_photo_is_decoded_and_usable():
+    """Forcing the decode must not leave the image unusable afterwards."""
+    image = open_upload(photo())
+
+    assert image.convert("RGB").resize((224, 224)).size == (224, 224)
