@@ -115,6 +115,10 @@ model worth spending it on. See `results/07-tta.txt`.
 | `nv` | melanocytic nevus | 967 | 83.4% | 91.1% |
 | `vasc` | vascular lesion | 20 | 100.0% | 58.8% |
 
+Two of those rows rest on fewer than 25 photographs each, `df` and `vasc`, and
+a single photograph moves their recall by several points. Read them with the
+caveat under Limitations rather than as measurements.
+
 Accuracy is 74.9%. That number is close to meaningless here and I am including
 it mainly to say so: nearly two thirds of the test set are ordinary moles, so a
 model answering `nv` to everything scores 64.1% while knowing nothing.
@@ -251,8 +255,13 @@ unknown and near-certainly worse. This is the largest limitation and it cannot
 be fixed with better code, only with different data.
 
 **Two classes carry numbers that mean very little.** `df` has 12 test images
-and `vasc` 20. Their 75% and 100% would move by tens of points if two
-photographs went the other way.
+and `vasc` 20, and "very little" is measurable rather than a feeling. With 12
+images, 75% recall means nine of twelve, and the 95% interval around it runs
+from 46.8% to 91.1%: 44 points wide, spanning "barely better than a coin" to
+"excellent". `vasc` looks perfect at 100%, which is 20 of 20 and consistent
+with a true rate as low as 83.9%. For contrast, `nv` rests on 967 images and
+moves 4.7 points. The intervals for every class are in
+`results/05-test-set.txt`.
 
 **Melanoma recall is 66.3% under the top-class rule**, and 37 melanomas were
 called ordinary moles. The threshold rule catches most of those, which is the
