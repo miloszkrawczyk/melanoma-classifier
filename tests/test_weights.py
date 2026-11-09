@@ -23,13 +23,19 @@ gap is worth knowing about rather than worth code.
 """
 
 import ast
+from pathlib import Path
 
 import torch
 
 from src.config import PROJECT_ROOT
 from src.device import pick_device
 from src.models.resnet import build_resnet18
-from src.weights import load_weights, safetensors_beside, save_weights
+from src.weights import (
+    load_weights,
+    pickle_beside,
+    safetensors_beside,
+    save_weights,
+)
 
 
 def python_files():
@@ -116,7 +122,7 @@ def test_a_saved_state_dict_comes_back_unchanged(tmp_path):
 
 
 def test_saving_writes_the_safetensors_sibling(tmp_path):
-    """The callers pass the .pth path the config names and get the new format."""
+    """Whatever extension the caller names, only the new format is written."""
     save_weights(a_state_dict(), tmp_path / "model.pth")
 
     assert (tmp_path / "model.safetensors").exists()
@@ -152,3 +158,24 @@ def test_a_loaded_state_dict_goes_into_a_model_on_the_device(tmp_path):
     model.load_state_dict(load_weights(tmp_path / "model.pth"))
 
     assert next(model.parameters()).device.type == device.type
+
+
+def test_a_safetensors_path_still_finds_an_old_pickle(tmp_path):
+    """The case the config change created, and the reason for the fallback.
+
+    MODELS now names weights/resnet.safetensors. An August checkout has only
+    weights/resnet.pth, and asking for the one has to find the other. Reading
+    the named path directly would have handed safetensors to the unpickler.
+    """
+    torch.save({"which": torch.tensor([1.0])}, tmp_path / "model.pth")
+    asked_for = tmp_path / "model.safetensors"
+
+    assert not asked_for.exists()
+    assert load_weights(asked_for)["which"].item() == 1.0
+
+
+def test_the_two_siblings_are_derived_from_either_extension():
+    """Both helpers ignore the extension they are handed, on purpose."""
+    for named in (Path("w/model.pth"), Path("w/model.safetensors")):
+        assert safetensors_beside(named).name == "model.safetensors"
+        assert pickle_beside(named).name == "model.pth"

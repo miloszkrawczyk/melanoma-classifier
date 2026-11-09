@@ -25,10 +25,21 @@ from src.config import CONFIDENCE_THRESHOLD, MALIGNANT, MALIGNANT_THRESHOLD
 
 EXAMPLES_DIR = Path(__file__).resolve().parent / "examples"
 
-# How long the progress bar takes at minimum. The prediction itself runs in
-# well under a second, and a bar that flashes past is worse than none: nobody
-# reads it and the page just blinks. These stages are real, the pauses only
-# hold each one long enough to be read. Drop the numbers to make it quicker.
+# This is not a progress bar. It is a countdown played before any work starts.
+#
+# All four pauses run in a loop in analyse() below, and only then does
+# predict() get called. They add up to 4.6 seconds; the work they stand in
+# front of takes about 34 milliseconds, 13 for the prediction and 21 for the
+# attention map, both measured. So the bar lasts roughly 135 times longer than
+# the thing it appears to be tracking.
+#
+# It stays anyway, and on purpose. A bar that completes in 34 ms is worse than
+# no bar: nobody can read it and the page just blinks. The stage labels do name
+# the four things that genuinely happen, which is why this reads as honest at a
+# glance, but they all happen after the bar has finished.
+#
+# Drop the numbers to make it quicker. Setting them all to zero leaves a
+# correct interface with no feedback at all.
 STAGES = (
     (0.15, "Wczytuję zdjęcie · Reading the photo", 0.9),
     (0.35, "Sprawdzam, czy to zmiana skórna · Checking it is a skin lesion", 1.1),
@@ -655,7 +666,11 @@ def build_ui(predictor):
         return (
             verdict_html(result),
             bars_html(result["probabilities"]),
-            gr.update(value=predictor.explain(image), visible=True),
+            # The diagnosis is already known from predict() above, so
+            # explain() does not need to work it out a second time.
+            gr.update(
+                value=predictor.explain(image, result["diagnosis"]), visible=True
+            ),
         )
 
     with gr.Blocks(title="Skin Lesion Classifier") as page:

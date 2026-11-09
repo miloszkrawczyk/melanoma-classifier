@@ -26,8 +26,19 @@ def safetensors_beside(path):
     return path.with_suffix(".safetensors")
 
 
+def pickle_beside(path):
+    """The legacy .pth file belonging next to a given weights path."""
+    return path.with_suffix(".pth")
+
+
 def load_weights(path):
-    """Read a state dict, from safetensors if there is one, else from the pickle."""
+    """Read a state dict, from safetensors if there is one, else from the pickle.
+
+    The extension on `path` is not used. Both candidates are derived from it,
+    so the config can name whichever format it prefers and callers never have
+    to know which one is on disk. That is what keeps an August checkout, with
+    only the .pth, working against a config that asks for safetensors.
+    """
     safe = safetensors_beside(path)
     if safe.exists():
         return load_file(safe)
@@ -35,13 +46,13 @@ def load_weights(path):
     # weights_only=True because this file is a pickle and unpickling runs what
     # the file says to run. See the comment in predict.py for why that matters
     # here rather than in theory.
-    return torch.load(path, map_location="cpu", weights_only=True)
+    return torch.load(pickle_beside(path), map_location="cpu", weights_only=True)
 
 
 def save_weights(state_dict, path):
     """Write a state dict as safetensors, whatever extension the path carries.
 
-    Takes the .pth path the config still names and writes the sibling, so the
-    callers do not each have to know how the two relate.
+    Only ever writes the new format. Nothing in the project produces a pickle
+    any more; the reader keeps understanding one.
     """
     save_file(state_dict, safetensors_beside(path))

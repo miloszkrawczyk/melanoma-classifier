@@ -26,8 +26,13 @@ if __name__ == "__main__":
     weights = MODELS["resnet"]["weights"]
 
     if not weights.exists():
+        # Two ways to be missing it, and retraining is the expensive one. A
+        # checkout from before the format change has the .pth and needs only
+        # the converter.
         raise SystemExit(
-            f"no {weights}. Train it first: uv run python -m src.train resnet"
+            f"no {weights}.\n"
+            "  have the old .pth? uv run python -m scripts.convert_weights\n"
+            "  have neither?     uv run python -m src.train resnet"
         )
 
     api = HfApi()
@@ -42,11 +47,15 @@ if __name__ == "__main__":
         repo_id=repo_id,
     )
 
-    # Renamed on the way up: "resnet.pth" says what it is without needing the
+    # Renamed on the way up: the name says what it is without needing the
     # weights/ directory the project happens to keep it in.
+    #
+    # safetensors, because a published pickle asks everyone who downloads it to
+    # run whatever is inside. The older resnet.pth already on the Hub is left
+    # alone, so the download instruction in the README keeps working.
     api.upload_file(
         path_or_fileobj=weights,
-        path_in_repo="resnet.pth",
+        path_in_repo="resnet.safetensors",
         repo_id=repo_id,
         commit_message="upload fine-tuned resnet18",
     )

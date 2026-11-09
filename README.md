@@ -94,6 +94,15 @@ Same weights, same photos, different reading of the same seven numbers. For a
 screening tool the right-hand column is the right trade: a false alarm costs an
 appointment, a miss costs considerably more.
 
+**These figures predate one change the service has since made.** It now shows
+the network each photo four times, turned by a quarter each time, and averages
+the four answers. On validation that takes recall from 93.9% to 95.2%, four
+missed lesions out of eighteen, and raises PR-AUC from 0.721 to 0.742, which
+says the ranking improved rather than the operating point sliding. It costs 36
+more false alarms. The table above was measured before it, on the test set,
+which has been used once and is staying that way until there is a retrained
+model worth spending it on. See `results/07-tta.txt`.
+
 **Per class, taking the top class:**
 
 | class | | support | recall | precision |
@@ -105,6 +114,10 @@ appointment, a miss costs considerably more.
 | `mel` | melanoma | 175 | 66.3% | 42.5% |
 | `nv` | melanocytic nevus | 967 | 83.4% | 91.1% |
 | `vasc` | vascular lesion | 20 | 100.0% | 58.8% |
+
+Two of those rows rest on fewer than 25 photographs each, `df` and `vasc`, and
+a single photograph moves their recall by several points. Read them with the
+caveat under Limitations rather than as measurements.
 
 Accuracy is 74.9%. That number is close to meaningless here and I am including
 it mainly to say so: nearly two thirds of the test set are ordinary moles, so a
@@ -242,8 +255,13 @@ unknown and near-certainly worse. This is the largest limitation and it cannot
 be fixed with better code, only with different data.
 
 **Two classes carry numbers that mean very little.** `df` has 12 test images
-and `vasc` 20. Their 75% and 100% would move by tens of points if two
-photographs went the other way.
+and `vasc` 20, and "very little" is measurable rather than a feeling. With 12
+images, 75% recall means nine of twelve, and the 95% interval around it runs
+from 46.8% to 91.1%: 44 points wide, spanning "barely better than a coin" to
+"excellent". `vasc` looks perfect at 100%, which is 20 of 20 and consistent
+with a true rate as low as 83.9%. For contrast, `nv` rests on 967 images and
+moves 4.7 points. The intervals for every class are in
+`results/05-test-set.txt`.
 
 **Melanoma recall is 66.3% under the top-class rule**, and 37 melanomas were
 called ordinary moles. The threshold rule catches most of those, which is the
@@ -256,9 +274,12 @@ colours, greyscale images and diagrams, and it wrongly rejects 6 of 1521
 validation photos. It will happily accept a photograph of a textured beige
 wall. A real fix needs a second model trained on skin/not-skin pairs.
 
-**The weights are a pickle.** `.pth` files can execute code on load. Ours is
-safe because I made it, but `safetensors` would be the correct format for
-anything published.
+**The published weights are still a pickle.** `.pth` files execute whatever
+they contain when loaded, and the instruction above tells you to download one
+off the internet, so "mine is safe because I made it" was never the point.
+Loading now refuses anything that is not a tensor, training writes
+`safetensors`, and that is the format the container ships. What is still on the
+Hub is the original `.pth`, until I push the converted file.
 
 ## What I would do next
 

@@ -169,12 +169,18 @@ VAL_RATIO: float = 0.15
 IMAGE_SIZE: int = 224
 
 # Channel means and deviations of the training images, measured by
-# scripts/compute_stats.py over all 6986 of them. Skin close-ups come out
+# scripts/compute_stats.py over all 7009 of them. Skin close-ups come out
 # much brighter, much redder and far more alike than internet photos, so
 # the ImageNet figures below would centre the data in the wrong place.
 # These belong to the network trained from scratch.
+#
+# Remeasured after the split started keeping class proportions, because these
+# are properties of whichever photos ended up in training. The answer barely
+# moved: the means came back identical and one digit of one deviation changed,
+# 0.140 to 0.141. Worth knowing, since it says the old numbers were never the
+# problem, and worth redoing anyway so the count above is not a lie.
 HAM10000_MEAN: tuple = (0.764, 0.546, 0.571)
-HAM10000_STD: tuple = (0.140, 0.152, 0.169)
+HAM10000_STD: tuple = (0.141, 0.152, 0.169)
 
 # The same two figures measured across ImageNet. A model pretrained there
 # was fed input scaled exactly this way, so handing it anything else costs
@@ -188,34 +194,134 @@ IMAGENET_STD: tuple = (0.229, 0.224, 0.225)
 ROTATION_DEGREES: int = 20
 
 
+# *** Test-time augmentation ***
+# At inference the same photo is shown to the network four times, turned by a
+# quarter each time, and the four sets of probabilities are averaged. A lesion
+# has no top or bottom, so all four are equally fair readings of it, and the
+# answers differ only because convolution is not rotation invariant.
+#
+# Quarter turns rather than the ROTATION_DEGREES used in training: a turn by a
+# right angle is an exact permutation of pixels, with no interpolation and none
+# of the empty corners the comment above worries about.
+#
+# Measured on validation, 1521 images, same weights, threshold 0.15:
+#
+#                       recall  precision  missed  false alarms  PR-AUC
+#   no TTA               93.9%      41.1%      18           394   0.721
+#   four turns           95.2%      39.4%      14           430   0.742
+#   four turns + mirror  95.6%      39.8%      13           423   0.742
+#
+# Four misses fewer out of eighteen, and PR-AUC rises, which says the ranking
+# genuinely improved rather than sliding along the same curve. The price is 36
+# more false alarms. Mirroring adds 0.3 points of recall at identical PR-AUC,
+# so it buys nothing but time. Reproduce with scripts/measure_tta.py.
+TTA_QUARTER_TURNS: tuple = (0, 1, 2, 3)
+
+
 # *** Training ***
 # How many images the network looks at before it updates its weights. Small
 # enough to fit in a laptop's memory, large enough that one odd photo cannot
 # drag the whole update off course.
 BATCH_SIZE: int = 32
 
+# How many processes decode and augment photos alongside the training loop.
+# Measured on the real command, three ResNet epochs over 7009 photos:
+#
+#   workers                      per epoch   speedup
+#     0                             54 s       1.0x
+#     2, restarted each epoch       48 s       1.14x
+#     2, kept alive between epochs  34 s       1.6x
+#
+# Two is the whole win on the loading side. In isolation the loaders reach 312
+# photos a second with none, 698 with two, 2616 with eight, while the model
+# consumes about 290, so once loading clears that, more processes have nothing
+# to do: four and eight were measurably no faster.
+#
+# The reason persistent_workers matters so much is macOS. It starts processes
+# by spawning rather than forking, so each worker re-imports torch, and both
+# the training and validation loaders rebuild theirs every epoch. Measured in
+# isolation with fork the epoch came out at 24 s, which the real command never
+# delivers: that number was 1.6x too good and is the reason these figures come
+# from "python -m src.train" and not from a snippet.
+#
+# This is this machine's number, not a universal one. On faster hardware the
+# model stops being the bottleneck and the threshold moves up.
+#
+# pin_memory is deliberately not set alongside this. PyTorch answers it with
+# "'pin_memory' argument is set as true but not supported on MPS now", and the
+# timings with and without are identical. It earns its place on CUDA, which is
+# neither this machine nor the CPU-only container.
+NUM_WORKERS: int = 2
+
+# *** Regularisation and when to stop ***
+# Weight decay pulls every weight slightly towards zero on every step, which
+# keeps the network from fitting the training set in detail it cannot
+# generalise. It is needed here, and that part is measured: in results/04 the
+# training loss fell to 0.2505 while the validation loss bottomed at 0.6373 in
+# epoch 7 and then drifted up to 0.6849. A 2.7x gap is overfitting that has
+# already started.
+#
+# The value itself is convention, not measurement: 1e-4 is the usual starting
+# point for AdamW at these learning rates. Saying otherwise would be inventing
+# a measurement. The retraining run is what will show whether it earned its
+# place.
+WEIGHT_DECAY: float = 1e-4
+
+# How far the learning rate drops when it is cut. A tenth is what
+# ReduceLROnPlateau uses by default, written out because a number that decides
+# something does not belong hidden inside a library call.
+#
+# The two patiences that go with it are NOT here. They live per model in MODELS
+# below, because measuring them on one model and applying them to both is a
+# mistake I made and then caught: see the tables there.
+LR_DROP: float = 0.1
+
 # Trained weights land here, one file per model so training the ResNet does
 # not quietly wipe out the CNN. Gitignored, since running the training
 # rebuilds them and a binary blob is not worth versioning.
+#
+# Named .safetensors because that is what training writes and what the image
+# ships. load_weights still reads a .pth of the same name if that is all a
+# checkout has, so naming the preferred format here breaks nothing.
 WEIGHTS_DIR: Path = PROJECT_ROOT / "weights"
 
 # The two networks need different treatment, so every setting that differs
 # between them lives here rather than being edited by hand between runs.
 MODELS: dict = {
     "cnn": {
-        "weights": WEIGHTS_DIR / "cnn.pth",
+        "weights": WEIGHTS_DIR / "cnn.safetensors",
         # Its own statistics, because nothing constrains a network built here.
         "mean": HAM10000_MEAN,
         "std": HAM10000_STD,
         # Adam's own default. Starting from noise, the first steps have a long
         # way to travel.
         "learning_rate": 0.001,
-        # Augmentation made the task hard enough that 15 epochs cut the run
-        # short. Only the best epoch is kept, so overshooting costs time only.
-        "epochs": 40,
+        # Its own log says 40 was still too few: results/03 found its best at
+        # epoch 37 of 40 and was still improving when it ran out. 60 is a
+        # ceiling, and early stopping decides when to stop.
+        "epochs": 60,
+        # Measured on the losses recorded in results/03. That run went
+        # thirteen epochs without improving, epochs 14 to 26, and then found
+        # its best at 37:
+        #
+        #   patience   stops after   best epoch   best loss
+        #      5, 8, 10, 12   18-25           13      1.0269
+        #     15                 40           37      0.9478
+        #
+        # So anything under 14 keeps a model 8.3% worse on its own loss. A
+        # network learning from scratch has a far noisier validation curve
+        # than a pretrained one being nudged: standard deviation 0.169 across
+        # its epochs against the ResNet's 0.126.
+        "early_stopping_patience": 15,
+        # Five, not the ResNet's two. Two-epoch dips happen constantly on this
+        # curve, three times in the first ten epochs of results/03, and
+        # cutting the rate on each one leaves the model learning at 1e-5 while
+        # its training loss is still falling. Measured once with two: the run
+        # stopped at epoch 13, underfit.
+        "lr_patience": 5,
     },
     "resnet": {
-        "weights": WEIGHTS_DIR / "resnet.pth",
+        "weights": WEIGHTS_DIR / "resnet.safetensors",
         # ImageNet's statistics, because that is what its filters were fed
         # during pretraining.
         "mean": IMAGENET_MEAN,
@@ -223,7 +329,20 @@ MODELS: dict = {
         # Ten times smaller. Its weights are already good, so the point is to
         # nudge them, not to knock them out of place.
         "learning_rate": 0.0001,
-        # Fewer epochs too: it starts most of the way there.
-        "epochs": 15,
+        # A ceiling now, not a count: early stopping decides when to stop and
+        # this only says when to give up waiting. 15 was too low to be a
+        # ceiling, since the old run was still finding near-ties at epoch 12.
+        "epochs": 30,
+        # Measured on the losses recorded in results/04. That run went three
+        # epochs without improving, 4 to 6, before its best at 7:
+        #
+        #   patience   stops after   best epoch   best loss
+        #      1, 2, 3       4, 5, 6            3      0.6815
+        #      4, 5           11, 12            7      0.6373
+        #
+        # Four is the minimum, five leaves a margin. Far smaller than the
+        # CNN's fifteen, because a pretrained network's curve is much calmer.
+        "early_stopping_patience": 5,
+        "lr_patience": 2,
     },
 }

@@ -14,17 +14,55 @@ ends with a pass over the validation set, so the weights that get saved are
 the ones that did best on photos the network never trained on.
 """
 
+import random
 import sys
 
+import numpy as np
 import torch
 import torch.nn as nn
 
-from src.config import CLASSES, MODELS, WEIGHTS_DIR
+from src.config import (
+    CLASSES,
+    LR_DROP,
+    MODELS,
+    SEED,
+    WEIGHT_DECAY,
+    WEIGHTS_DIR,
+)
 from src.data import build_dataloaders, load_metadata, split_metadata
 from src.device import pick_device
 from src.models.cnn import SkinLesionCNN
 from src.models.resnet import build_resnet18
 from src.weights import safetensors_beside, save_weights
+
+
+def set_seed(seed=SEED):
+    """Pin every generator the training run draws from.
+
+    The split was already repeatable: data.py shuffles lesion ids through
+    random.Random(SEED). Nothing else was. Four things draw from the global
+    generators and all four change the weights: the CNN's initialisation, the
+    new head on the ResNet, the order the training loader hands out batches,
+    and the flips, rotations and colour jitter of augmentation.
+
+    Without this, two runs of the same command produce different weights and
+    different numbers in results/, which makes comparing two runs meaningless.
+    That is about to matter more than usual: the frozen-backbone comparison
+    further along is supposed to differ in one thing only.
+
+    numpy is seeded although training never calls it directly, because pandas
+    and scikit-learn both sit on it and the stratified split uses sklearn.
+    Seeding it now is cheaper than working out later why a split will not come
+    out the same twice.
+
+    What this does not buy is bit-for-bit identical runs. Some MPS kernels are
+    not deterministic, so two runs land close rather than equal. Seeding
+    removes the avoidable difference, not the hardware's.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    # Covers the CPU generator and the MPS or CUDA one, whichever is in use.
+    torch.manual_seed(seed)
 
 
 def build_model(name):
@@ -87,6 +125,10 @@ def evaluate(model, loader, loss_fn, device):
 # Guarded, because evaluate.py imports build_model from here. Without the
 # guard, that import would run the whole training again.
 if __name__ == "__main__":
+    # Before the model is built, because building it is the first thing that
+    # draws from the generators.
+    set_seed()
+
     name = sys.argv[1] if len(sys.argv) > 1 else "cnn"
     model = build_model(name)
     settings = MODELS[name]
@@ -103,28 +145,63 @@ if __name__ == "__main__":
 
     model = model.to(device)
     loss_fn = nn.CrossEntropyLoss(weight=class_weights(train_metadata).to(device))
-    optimizer = torch.optim.Adam(model.parameters(), lr=settings["learning_rate"])
+    # AdamW rather than Adam with weight_decay set. Adam adds the L2 penalty
+    # to the gradient before the adaptive step rescales it, so how hard a
+    # weight is pulled towards zero ends up depending on how large its
+    # gradients have been. AdamW applies the decay separately, which is the
+    # whole reason it exists and the only reason to prefer it here.
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=settings["learning_rate"],
+        weight_decay=WEIGHT_DECAY,
+    )
+
+    # Cuts the learning rate when the validation loss stops improving, rather
+    # than on a timetable. It watches the same number early stopping watches,
+    # so the two cannot disagree about whether progress has stalled.
+    # Both patiences come from the model's own settings, not from one pair
+    # shared by both. Measured: the CNN needs fifteen where the ResNet needs
+    # five, because a network learning from scratch has a far noisier
+    # validation curve than a pretrained one being nudged.
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, factor=LR_DROP, patience=settings["lr_patience"]
+    )
 
     # Validation loss decides which weights are worth keeping. Training loss
     # keeps falling even once the network has started memorising, so it cannot
     # be the one to judge.
     best_val_loss = float("inf")
+    epochs_since_best = 0
 
     for epoch in range(1, settings["epochs"] + 1):
         train_loss = train_one_epoch(model, train_loader, loss_fn, optimizer, device)
         val_loss, val_accuracy = evaluate(model, val_loader, loss_fn, device)
+        scheduler.step(val_loss)
 
         line = (
             f"epoch {epoch:2}: train loss {train_loss:.4f}, "
-            f"val loss {val_loss:.4f}, val accuracy {val_accuracy:.2%}"
+            f"val loss {val_loss:.4f}, val accuracy {val_accuracy:.2%}, "
+            f"lr {optimizer.param_groups[0]['lr']:.1e}"
         )
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
+            epochs_since_best = 0
             save_weights(model.state_dict(), settings["weights"])
             line += "  <- saved"
+        else:
+            epochs_since_best += 1
 
         print(line)
+
+        if epochs_since_best >= settings["early_stopping_patience"]:
+            # Said out loud, because a run that just ends looks like a crash
+            # and a log that stops early needs to say it meant to.
+            print(
+                f"stopping early: {settings['early_stopping_patience']} epochs "
+                "without a better validation loss"
+            )
+            break
 
     # The path the config names is the old .pth; save_weights writes the
     # safetensors sibling, and this has to say which file actually appeared.
