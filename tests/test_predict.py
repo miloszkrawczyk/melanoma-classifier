@@ -6,9 +6,10 @@ trained weights and will run anywhere.
 
 import pytest
 import torch
+from PIL import Image
 
-from src.config import TTA_QUARTER_TURNS
-from src.predict import looks_like_skin, roughness
+from src.config import MODELS, PROJECT_ROOT, TTA_QUARTER_TURNS
+from src.predict import Predictor, looks_like_skin, roughness
 
 
 def skin_like_tensor():
@@ -120,3 +121,28 @@ def test_averaging_rotations_keeps_a_probability_distribution():
 def test_the_configured_turns_are_the_four_distinct_ones():
     """Averaging the same reading twice would weight it twice, not help."""
     assert sorted(TTA_QUARTER_TURNS) == [0, 1, 2, 3]
+
+
+# Needs the trained weights, so it skips where they are not there, the same
+# way the dataset tests do. Everything above this line runs anywhere.
+@pytest.mark.skipif(
+    not MODELS["resnet"]["weights"].exists(),
+    reason="needs the trained weights, see the README for how to fetch them",
+)
+def test_passing_the_diagnosis_does_not_change_the_heatmap():
+    """The shortcut must be a shortcut and nothing more.
+
+    explain() can work out which diagnosis to draw for, or be told. Being told
+    saves a second four-rotation batch, which the interface was paying for
+    every analysis. It must not change the picture: an off-by-one in the class
+    index would quietly draw the map for a neighbouring diagnosis.
+    """
+    predictor = Predictor()
+    photo = Image.open(PROJECT_ROOT / "frontend" / "examples" / "ISIC_0025303.jpg")
+
+    diagnosis = predictor.predict(photo)["diagnosis"]
+
+    worked_out = predictor.explain(photo)
+    told = predictor.explain(photo, diagnosis)
+
+    assert told.tobytes() == worked_out.tobytes()
