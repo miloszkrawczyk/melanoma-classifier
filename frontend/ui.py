@@ -666,7 +666,11 @@ def build_ui(predictor):
         return (
             verdict_html(result),
             bars_html(result["probabilities"]),
-            gr.update(value=predictor.explain(image), visible=True),
+            # The diagnosis is already known from predict() above, so
+            # explain() does not need to work it out a second time.
+            gr.update(
+                value=predictor.explain(image, result["diagnosis"]), visible=True
+            ),
         )
 
     with gr.Blocks(title="Skin Lesion Classifier") as page:
